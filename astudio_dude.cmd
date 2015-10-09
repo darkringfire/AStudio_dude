@@ -89,19 +89,19 @@ if x%1==x-c (
     goto flags
 )
 
-if x%Aconf%==x1 ( 
+if exist "%conf%" (
+    for /f "eol=# tokens=1,2" %%i in (%conf%) do (
+        set c_%%i=%%j
+    )
+) else (
+    echo !!: File %conf% not exist
+)
+
+if x%Aconf%==x ( 
     set edit=1
     goto conf
 )
 
-if not exist "%conf%" (
-    echo !!: File %conf% not exist
-    exit
-)
-
-for /f "eol=# tokens=1,2" %%i in (%conf%) do (
-    set c_%%i=%%j
-)
 
 if x%c_device%==x (
     echo EE: Device not specified.
@@ -128,9 +128,9 @@ set params=
 if x%Afuses%==x goto skipfuse
 if not x%c_writefuse%==xYES (
     echo ii: Getting FUSEs
-    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -U efuse:r:-:b -qq') do set c_efuse=%%i
-    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -U hfuse:r:-:b -qq') do set c_hfuse=%%i
-    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -U lfuse:r:-:b -qq') do set c_lfuse=%%i
+    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -B 4 -U efuse:r:-:b -qq') do set c_efuse=%%i
+    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -B 4 -U hfuse:r:-:b -qq') do set c_hfuse=%%i
+    for /F "tokens=*" %%i in ('"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% -B 4 -U lfuse:r:-:b -qq') do set c_lfuse=%%i
     echo !!: Change efuse, lfuse, hfuse and uncomment "writefuse YES" to write FUSEs
     set edit=1
     goto conf
@@ -163,21 +163,21 @@ if not x%c_port%==x set params=%params% -P %c_port%
 if not x%c_baudrate%==x set params=%params% -b %c_baudrate%
 if not x%c_bitclock%==x set params=%params% -B %c_bitclock%
 
-"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% %params%
+echo "%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% %params%
 
 :: =============================
 :: == conf ==
 :conf
 
 echo # Configuration for AStudioDude> %conf%
-if not x%c_device%==x       (echo device %c_device%>> %conf%)           else echo device >> %conf%
-if not x%c_programmer%==x   (echo programmer %c_programmer%>> %conf%)   else echo programmer usbasp >> %conf%
-if not x%c_port%==x         (echo port %c_port%>> %conf%)               else echo #port >> %conf%
-if not x%c_baudrate%==x     (echo baudrate %c_baudrate%>> %conf%)       else echo #baudrate >> %conf%
-if not x%c_bitclock%==x     (echo bitclock %c_bitclock%>> %conf%)       else echo #bitclock >> %conf%
-if not x%c_efuse%==x        (echo #efuse %c_efuse%>> %conf%)
-if not x%c_hfuse%==x        (echo #hfuse %c_hfuse%>> %conf%)
-if not x%c_lfuse%==x        (echo #lfuse %c_lfuse%>> %conf%)
+if not x%c_device%==x       (echo device %c_device% >> %conf%)           else echo device >> %conf%
+if not x%c_programmer%==x   (echo programmer %c_programmer% >> %conf%)   else echo programmer usbasp >> %conf%
+if not x%c_port%==x         (echo port %c_port% >> %conf%)               else echo #port >> %conf%
+if not x%c_baudrate%==x     (echo baudrate %c_baudrate% >> %conf%)       else echo #baudrate >> %conf%
+if not x%c_bitclock%==x     (echo bitclock %c_bitclock% >> %conf%)       else echo #bitclock >> %conf%
+if not x%c_efuse%==x        (echo #efuse %c_efuse% >> %conf%)
+if not x%c_hfuse%==x        (echo #hfuse %c_hfuse% >> %conf%)
+if not x%c_lfuse%==x        (echo #lfuse %c_lfuse% >> %conf%)
 echo #writefuse NO >> %conf%
 
 if x%edit%==x1 (
