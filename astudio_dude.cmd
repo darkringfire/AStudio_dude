@@ -175,7 +175,7 @@ if not x%c_device%==x       (echo device %c_device% >> %conf%)           else ec
 if not x%c_programmer%==x   (echo programmer %c_programmer% >> %conf%)   else echo programmer usbasp >> %conf%
 if not x%c_port%==x         (echo port %c_port% >> %conf%)               else echo #port >> %conf%
 if not x%c_baudrate%==x     (echo baudrate %c_baudrate% >> %conf%)       else echo #baudrate >> %conf%
-if not x%c_bitclock%==x     (echo bitclock %c_bitclock% >> %conf%)       else echo #bitclock >> %conf%
+if not x%c_bitclock%==x     (echo bitclock %c_bitclock% >> %conf%)       else echo #bitclock 4 >> %conf%
 if not x%c_efuse%==x        (echo #efuse %c_efuse% >> %conf%)
 if not x%c_hfuse%==x        (echo #hfuse %c_hfuse% >> %conf%)
 if not x%c_lfuse%==x        (echo #lfuse %c_lfuse% >> %conf%)
