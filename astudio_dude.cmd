@@ -94,14 +94,15 @@ if exist "%conf%" (
         set c_%%i=%%j
     )
 ) else (
-    echo !!: File %conf% not exist
+    echo !!: File %conf% not exists
 )
 
-if x%Aconf%==x ( 
+if x%Aconf%==x1 ( 
     set edit=1
     goto conf
 )
 
+echo fuses
 
 if x%c_device%==x (
     echo EE: Device not specified.
@@ -163,7 +164,7 @@ if not x%c_port%==x set params=%params% -P %c_port%
 if not x%c_baudrate%==x set params=%params% -b %c_baudrate%
 if not x%c_bitclock%==x set params=%params% -B %c_bitclock%
 
-echo "%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% %params%
+"%dudepath%avrdude.exe" -p %c_device% -c %c_programmer% %params%
 
 :: =============================
 :: == conf ==
