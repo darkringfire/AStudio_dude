@@ -15,6 +15,9 @@ $auto = ""
 $hex = ""
 $eep = ""
 
+$fuseBytes = ObjCreate("Scripting.Dictionary")
+$fuseBits = ObjCreate("Scripting.Dictionary")
+
 $i = 1
 
 while ($i <= $CmdLine[0])
@@ -40,7 +43,6 @@ ReadVars()
 
 InitGUI()
 
-ReadFuses()
 
 
 While (1)
@@ -49,15 +51,66 @@ WEnd
 
 ;---------------------------------------
 
+func DudeCmd()
+    return StringFormat("%s\avrdude.exe -c %s -p %s ", @ScriptDir, $programmer, $device)
+endfunc
+
 func ReadFuses()
-    $pid = Run(@ScriptDir & "\avrdude.exe -c usbasp -p m328p -U efuse:r:-:h -U hfuse:r:-:h -U lfuse:r:-:h", "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
+    const $posFuseLeft = 20
+    const $posFuseStepX = 100
+    const $posFuseTop = 140
     
+    GUICtrlSetData($stdoutCtrl, "");
     GUICtrlSetData($stderrCtrl, "")
-    while ProcessExists($pid)
-        GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
-    wend
     
-    GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
+    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
+    $arg = ""
+    
+    for $i in $fuseBytes
+        GUICtrlDelete($fuseBytes($i)("ctrl"))
+        GUICtrlDelete($fuseBytes($i)("label"))
+    next
+    for $i in $fuseBits
+        GUICtrlDelete($fuseBytes($i)("ctrl"))
+    next
+    
+    $fuseBytes = ObjCreate("Scripting.Dictionary")
+    $fuseBits = ObjCreate("Scripting.Dictionary")
+    if (FileExists($ini)) then
+        $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
+        for $i = 0 to UBound($fuseBytesList)-1
+            $fuseByteName = $fuseBytesList[$i]
+            $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
+            
+            $fuseBytes($fuseByteName) = ObjCreate("Scripting.Dictionary")
+            $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
+            $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posFuseLeft + $posFuseStepX * $i + 30, $posFuseTop, 30, 20)
+            
+            $fuseBitsList = StringSplit(IniRead($ini, $fuseByteName, "bits", ""), ":", $STR_NOCOUNT)
+            for $j = 0 to UBound($fuseBitsList)-1
+                $fuseBit = ObjCreate("Scripting.Dictionary")
+                $fuseBit("fuse") = $fuseByteName
+                $fuseBit("n") = $j
+                $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 10 + 20 * (8-$j), $posFuseStepX - 10, 20)
+                $fuseBits($fuseBitsList[$j]) = $fuseBit
+            next
+            $fuseBytes($fuseByteName)("bits") = $fuseBitsList
+            
+            ;GUICtrlSetData($stdoutCtrl, $fuseByteName & @CRLF, 1)
+            ;GUICtrlSetData($stdoutCtrl, _ArrayToString($fuseBitsList, @CRLF) & @CRLF, 1)
+        next
+
+        ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
+        
+        ;GUICtrlSetData($stderrCtrl, "")
+        ;while ProcessExists($pid)
+        ;    GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
+        ;wend
+        
+        ;GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
+        ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
+    endif
+    
 endfunc
 
 func InitGUI()
@@ -72,19 +125,13 @@ func InitGUI()
     Global $hexCtrl = GUICtrlCreateInput($hex, 20, 50, 600)
     Global $eepCtrl = GUICtrlCreateInput($eep, 20, 80, 600)
 
-    Global $efuseCtrl = GUICtrlCreateInput("", 20, 110, 40)
-    Global $hfuseCtrl = GUICtrlCreateInput("", 70, 110, 40)
-    Global $lfuseCtrl = GUICtrlCreateInput("", 120, 110, 40)
-    GUICtrlSetState($efuseCtrl, $GUI_DISABLE)
-    GUICtrlSetState($hfuseCtrl, $GUI_DISABLE)
-    GUICtrlSetState($lfuseCtrl, $GUI_DISABLE)
-    
-    Global $readFusesButton = GUICtrlCreateButton("Read", 170, 110, 50)
-    Global $writeFusesButton = GUICtrlCreateButton("Read", 170, 110, 50)
-    GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
+    Global $readFusesButton = GUICtrlCreateButton("Read", 20, 110, 50)
+    ;Global $writeFusesButton = GUICtrlCreateButton("Write", 80, 110, 50)
+    ;GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
+    GUICtrlSetOnEvent($readFusesButton, "ReadFuses")
 
-    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 170, 660, 300);
-    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 480, 660, 300);
+    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 470, 660, 150);
+    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 630, 660, 150);
     GUICtrlSetFont($stdoutCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetFont($stderrCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetBkColor($stdoutCtrl, 0x202020)
