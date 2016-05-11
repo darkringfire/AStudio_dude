@@ -17,6 +17,7 @@ $eep = ""
 
 $fuseBytes = ObjCreate("Scripting.Dictionary")
 $fuseBits = ObjCreate("Scripting.Dictionary")
+$fuseOptions = ObjCreate("Scripting.Dictionary")
 
 $i = 1
 
@@ -73,11 +74,16 @@ func ReadFuses()
     for $i in $fuseBits
         GUICtrlDelete($fuseBytes($i)("ctrl"))
     next
+    for $i in $fuseOptions
+        GUICtrlDelete($fuseOptions($i)("ctrl"))
+    next
     
     $fuseBytes = ObjCreate("Scripting.Dictionary")
     $fuseBits = ObjCreate("Scripting.Dictionary")
+    $fuseOptions = ObjCreate("Scripting.Dictionary")
     if (FileExists($ini)) then
         $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
+        $fuseOptionsList = StringSplit(IniRead($ini, "main", "options", ""), ":", $STR_NOCOUNT)
         for $i = 0 to UBound($fuseBytesList)-1
             $fuseByteName = $fuseBytesList[$i]
             $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
@@ -95,9 +101,36 @@ func ReadFuses()
                 $fuseBits($fuseBitsList[$j]) = $fuseBit
             next
             $fuseBytes($fuseByteName)("bits") = $fuseBitsList
+        next
+        for $i = 0 to UBound($fuseOptionsList)-1
+            $fuseOptionName = $fuseOptionsList[$i]
             
-            ;GUICtrlSetData($stdoutCtrl, $fuseByteName & @CRLF, 1)
-            ;GUICtrlSetData($stdoutCtrl, _ArrayToString($fuseBitsList, @CRLF) & @CRLF, 1)
+            $fuseOptions($fuseOptionName) = ObjCreate("Scripting.Dictionary")
+            $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
+            ;$fuseOptions($fuseOptionName)("label") = GUICtrlCreateLabel($desc, $posFuseLeft, $posFuseTop + 180 + 20 * $i, 40, 20)
+            $valuesStep = IniRead($ini, $fuseOptionName, "list", "")
+            if ($valuesStep = "") then
+                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posFuseLeft, $posFuseTop + 200 + 20 * $i, 500, 20)
+            else
+                $valuesStep = Int($valuesStep)
+                $valuesSection = IniReadSection($ini, $fuseOptionName)
+                $valuesList = ObjCreate("Scripting.Dictionary")
+                for $j = 1 to $valuesSection[0][0]
+                    if (StringLeft($valuesSection[$j][0], 1) = "v") then
+                        $valuesList(StringTrimLeft($valuesSection[$j][0], 1)) = $valuesSection[$j][1]
+                    endif
+                next
+                
+                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posFuseLeft, $posFuseTop + 200 + 20 * $i, 500, 20)
+                for $j in $valuesList
+                    GUICtrlSetData(-1, $valuesList($j))
+                next
+                
+                ;for $j in $valuesList
+                ;    GUICtrlSetData($stdoutCtrl, $j & " = " & $valuesList($j) & @CRLF, 1);
+                ;next
+                
+            endif
         next
 
         ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
@@ -109,6 +142,8 @@ func ReadFuses()
         
         ;GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
         ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
+    else
+        MsgBox(0, "Warning", "Ini file for this device not found")
     endif
     
 endfunc
@@ -130,8 +165,8 @@ func InitGUI()
     ;GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
     GUICtrlSetOnEvent($readFusesButton, "ReadFuses")
 
-    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 470, 660, 150);
-    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 630, 660, 150);
+    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 570, 660, 100);
+    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 680, 660, 100);
     GUICtrlSetFont($stdoutCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetFont($stderrCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetBkColor($stdoutCtrl, 0x202020)
