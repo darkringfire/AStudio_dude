@@ -3,6 +3,7 @@
 #include <WindowsConstants.au3>
 #include <ColorConstants.au3>
 #include <StringConstants.au3>
+#include <ComboConstants.au3>
 
 const $conf = "avrdude.ini"
 
@@ -97,7 +98,7 @@ func ReadFuses()
                 $fuseBit = ObjCreate("Scripting.Dictionary")
                 $fuseBit("fuse") = $fuseByteName
                 $fuseBit("n") = $j
-                $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 10 + 20 * (8-$j), $posFuseStepX - 10, 20)
+                $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 10 + 18 * (8-$j), $posFuseStepX - 10, 20)
                 $fuseBits($fuseBitsList[$j]) = $fuseBit
             next
             $fuseBytes($fuseByteName)("bits") = $fuseBitsList
@@ -109,21 +110,26 @@ func ReadFuses()
             $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
             ;$fuseOptions($fuseOptionName)("label") = GUICtrlCreateLabel($desc, $posFuseLeft, $posFuseTop + 180 + 20 * $i, 40, 20)
             $valuesStep = IniRead($ini, $fuseOptionName, "list", "")
+            $default = Int(IniRead($ini, $fuseOptionName, "default", "0"))
             if ($valuesStep = "") then
-                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posFuseLeft, $posFuseTop + 200 + 20 * $i, 500, 20)
+                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posFuseLeft, $posFuseTop + 180 + 21 * $i, 500, 20)
             else
                 $valuesStep = Int($valuesStep)
                 $valuesSection = IniReadSection($ini, $fuseOptionName)
                 $valuesList = ObjCreate("Scripting.Dictionary")
                 for $j = 1 to $valuesSection[0][0]
                     if (StringLeft($valuesSection[$j][0], 1) = "v") then
-                        $valuesList(StringTrimLeft($valuesSection[$j][0], 1)) = $valuesSection[$j][1]
+                        $valuesList(Int(StringTrimLeft($valuesSection[$j][0], 1))) = $valuesSection[$j][1]
                     endif
                 next
                 
-                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posFuseLeft, $posFuseTop + 200 + 20 * $i, 500, 20)
+                $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posFuseLeft, $posFuseTop + 180 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST)
                 for $j in $valuesList
-                    GUICtrlSetData(-1, $valuesList($j))
+                    if ($j = $default) then
+                        GUICtrlSetData(-1, $valuesList($j), $valuesList($j))
+                    else
+                        GUICtrlSetData(-1, $valuesList($j))
+                    endif
                 next
                 
                 ;for $j in $valuesList
@@ -149,7 +155,7 @@ func ReadFuses()
 endfunc
 
 func InitGUI()
-    Global $mainWindow = GUICreate("Main", 700, 800) 
+    Global $mainWindow = GUICreate("Main", 700, 900) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
 
     Global $progCtrl = GUICtrlCreateInput($programmer, 20, 20, 100)
@@ -165,8 +171,8 @@ func InitGUI()
     ;GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
     GUICtrlSetOnEvent($readFusesButton, "ReadFuses")
 
-    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 570, 660, 100);
-    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 680, 660, 100);
+    Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 670, 660, 100);
+    Global $stderrCtrl = GUICtrlCreateEdit("", 20, 780, 660, 100);
     GUICtrlSetFont($stdoutCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetFont($stderrCtrl, 10, 0, 0, "Consolas")
     GUICtrlSetBkColor($stdoutCtrl, 0x202020)
