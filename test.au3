@@ -57,10 +57,8 @@ WEnd
 ;---------------------------------------
 
 func ReadDudeConf()
-    Local $progArr[0][2]
-    Local $devArr[0][2]
-    
-    _ArrayAdd($progArr, "1|2")
+    Local $progArr[0][3]
+    Local $devArr[0][3]
     
     $hardwareList("programmers") = ObjCreate("Scripting.Dictionary")
     $hardwareList("devices") = ObjCreate("Scripting.Dictionary")
@@ -71,62 +69,42 @@ func ReadDudeConf()
         $id = ""
         $desc = ""
         $parent = ""
-        while 1
+        $line = ""
+        do
             $line = FileReadLine($dudeConfFile)
-            if (@error = 0) then
-                $match = StringRegExp($line, '^\s*(\w+)(?:\s*(?:\sparent\s|=)\s*"(.+)")?', $STR_REGEXPARRAYMATCH)
-                if @error = 0 then
-                    _ArrayAdd($progArr, StringFormat("%s|%s|%s", $match[0], UBound($match)>1 ? $match[1] : ""))
-                endif
-                ; $line = StringSplit($line, "=")
-                ; select
-                    ; case $line[0] = 1
-                        ; $match = StringRegExp($line[1], '^\s*([\w\d]+)(?:\s+parent\s+"(.+)")?', $STR_REGEXPARRAYMATCH)
-                        ; if @error = 0 then
-                            ; if ($match[0] = "programmer" or $match[0] = "part") then
-                                ; if $id <> "" then
-                                    ; switch $type
-                                        ; case "programmer"
-                                            ; _ArrayAdd($progArr, $id & "|" & $desc & "|" & $parent)
-                                        ; case "part"
-                                            ; _ArrayAdd($devArr, $id & "|" & $desc & "|" & $parent)
-                                    ; endswitch
-                                ; endif
-                                ; $type = $match[0]
-                                ; $id = ""
-                                ; $desc = ""
-                                ; $parent = UBound($match) = 2 ? $match[1] : ""
-                            ; endif
-                        ; endif
-                    ; case $line[0] > 1
-                        ; $line[1] = StringStripWS($line[1], $STR_STRIPLEADING + $STR_STRIPTRAILING)
-                        ; $match = StringRegExp($line[2], '"(.+)"', $STR_REGEXPARRAYMATCH)
-                        ; if @error = 0 then
-                            ; switch $line[1]
-                                ; case "id"
-                                    ; $id = $match[0]
-                                ; case "desc"
-                                    ; $desc = $match[0]
-                            ; endswitch
-                        ; endif
-                ; endselect
-            else
-                ; if $id <> "" then
-                    ; switch $type
-                        ; case "programmer"
-                            ; _ArrayAdd($progArr, $id & "|" & $desc)
-                        ; case "part"
-                            ; _ArrayAdd($devArr, $id & "|" & $desc)
-                    ; endswitch
-                ; endif
-                ExitLoop
+            $eof = @error
+            if $eof = 0 then
+                $match = StringRegExp($line, '^\s*(\w+)(?:\s*(?:=|\sparent\s)\s*"(.+)")?', $STR_REGEXPARRAYMATCH)
             endif
-        wend
+            $matched = @error
+            if $matched = 0 or $eof <> 0 then
+                select 
+                    case $eof <> 0 or $match[0] = "programmer" or $match[0] = "part"
+                        if $id <> "" then
+                            if $type = "programmer" then
+                                _ArrayAdd($progArr, $id & "|" & $desc & "|" & $parent)
+                            else
+                                _ArrayAdd($devArr, $id & "|" & $desc & "|" & $parent)
+                            endif
+                        endif
+                        if $matched = 0 then
+                            $type = $match[0]
+                            $parent = UBound($match)>1 ? $match[1] : ""
+                        endif
+                        $id = ""
+                        $desc = ""
+                    case $match[0] = "id"
+                        $id = $match[1]
+                    case $match[0] = "desc"
+                        $desc = $match[1]
+                endselect
+            endif
+        until $eof <> 0
         FileClose($dudeConfFile)
         _ArraySort($progArr)
         _ArraySort($devArr)
         _ArrayDisplay($progArr)
-        ;_ArrayDisplay($devArr)
+        _ArrayDisplay($devArr)
     endif
 endfunc
 
