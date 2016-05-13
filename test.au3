@@ -8,7 +8,7 @@
 const $conf = "avrdude.ini"
 
 Opt("GUIOnEventMode", 1)  ; Включает режим OnEvent 
-$hardwareList = ObjCreate("Scripting.Dictionary")
+
 $programmer = ""
 $device = ""
 $project = ""
@@ -16,6 +16,9 @@ $target = ""
 $auto = ""
 $hex = ""
 $eep = ""
+
+$programmers = ObjCreate("Scripting.Dictionary")
+$devices = ObjCreate("Scripting.Dictionary")
 
 $fuseBytes = ObjCreate("Scripting.Dictionary")
 $fuseBits = ObjCreate("Scripting.Dictionary")
@@ -43,11 +46,11 @@ if (FileExists($target & ".eep")) then
 endif
 
 
+ReadDudeConf()
+
 ReadVars()
 
 InitGUI()
-
-ReadDudeConf()
 
 
 While (1)
@@ -60,8 +63,6 @@ func ReadDudeConf()
     Local $progArr[0][3]
     Local $devArr[0][3]
     
-    $hardwareList("programmers") = ObjCreate("Scripting.Dictionary")
-    $hardwareList("devices") = ObjCreate("Scripting.Dictionary")
     $dudeConf = @ScriptDir & "\avrdude.conf"
     $dudeConfFile = FileOpen($dudeConf)
     if ($dudeConfFile <> 0) then
@@ -95,17 +96,66 @@ func ReadDudeConf()
                         $desc = ""
                     case $match[0] = "id"
                         $id = $match[1]
+                        if StringLeft($id, 1) = "." then
+                            $id = ""
+                        endif
                     case $match[0] = "desc"
                         $desc = $match[1]
                 endselect
             endif
         until $eof <> 0
         FileClose($dudeConfFile)
-        _ArraySort($progArr)
-        _ArraySort($devArr)
-        _ArrayDisplay($progArr)
-        _ArrayDisplay($devArr)
+        
+        DescInhetit($progArr, 70)
+        DescInhetit($devArr, 30)
+        
+        _ArraySort($progArr, 0, 0, 0, 1)
+        _ArraySort($devArr, 0, 0, 0, 1)
+        ;_ArrayDisplay($progArr)
+        ;_ArrayDisplay($devArr)
+        
+        for $i = 0 to UBound($progArr)-1
+            $programmers($progArr[$i][0]) = $progArr[$i][1]
+        next
+        for $i = 0 to UBound($devArr)-1
+            $devices($devArr[$i][0]) = $devArr[$i][1]
+        next
     endif
+endfunc
+
+func DescInhetit(ByRef $Arr, $len = 20)
+    local $arrById = ObjCreate("Scripting.Dictionary")
+    local $i
+    local $id
+    local $d
+    local $p
+    local $pid
+    local $pd
+    local $count
+    
+    for $i = 0 to UBound($Arr)-1
+        $arrById($Arr[$i][0]) = $i
+        
+        $Arr[$i][1] = StringLeft(StringStripWS($Arr[$i][1], $STR_STRIPLEADING + $STR_STRIPTRAILING + $STR_STRIPSPACES) & " ", $len)
+        $Arr[$i][1] = StringStripWS(StringRegExpReplace($Arr[$i][1], "\s\S+$", "..."), $STR_STRIPTRAILING)
+    next
+
+    do
+        $count = 0
+        for $i = 0 to UBound($Arr)-1
+            $id = $Arr[$i][0]
+            $d = $Arr[$i][1]
+            $pid = $Arr[$i][2]
+            if $d = "" and $pid <> "" then
+                $p = $arrById($pid)
+                $pd = $Arr[$p][1]
+                if $pd <> "" then
+                    $Arr[$i][1] = $pd
+                    $count +=1
+                endif
+            endif
+        next
+    until $count = 0
 endfunc
 
 func DudeCmd()
@@ -220,17 +270,17 @@ func InitGUI()
     Global $mainWindow = GUICreate("Main", 700, 900) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
 
-    Global $progCtrl = GUICtrlCreateCombo("", 20, 20, 100)
-    ; for $i in $hardwareList("programmers")
-        ; GUICtrlSetData(-1, StringFormat("%s - %s", $i, $hardwareList("programmers")($i)("desc")), 1)
-    ; next
+    Global $progCtrl = GUICtrlCreateCombo("", 20, 20, 400)
+    for $id in $programmers
+        GUICtrlSetData(-1, StringFormat("%s [%s]", $programmers($id), $id), 1)
+    next
     ; GUICtrlSetData(-1, $programmer, $programmer)
 
-    Global $devCtrl = GUICtrlCreateCombo("", 140, 20, 100)
-    ; for $i in $hardwareList("devices")
-        ; GUICtrlSetData(-1, StringFormat("%s - %s", $i, $hardwareList("devices")($i)("desc")), 1)
-    ; next
-    GUICtrlSetData(-1, $device, $device)
+    Global $devCtrl = GUICtrlCreateCombo("", 430, 20, 200)
+    for $i in $devices
+        GUICtrlSetData(-1, StringFormat("%s [%s]", $devices($i), $i), 1)
+    next
+    ;GUICtrlSetData(-1, $device, $device)
     ;GUICtrlSetOnEvent($progCtrl, "UpdateVars")
     ;GUICtrlSetOnEvent($devCtrl, "UpdateVars")
     
@@ -239,21 +289,21 @@ func InitGUI()
     Global $eepCtrl = GUICtrlCreateInput($eep, 20, 80, 600)
 
     Global $readFusesButton = GUICtrlCreateButton("Read", 20, 110, 50)
+    ;GUICtrlSetState(-1, $GUI_DISABLE)
+
     ;Global $writeFusesButton = GUICtrlCreateButton("Write", 80, 110, 50)
-    ;GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
-    GUICtrlSetOnEvent($readFusesButton, "ReadFusesConf")
+    ;GUICtrlSetOnEvent(-1, "ReadFusesConf")
 
     Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 670, 660, 100);
+    GUICtrlSetFont(-1, 10, 0, 0, "Consolas")
+    GUICtrlSetBkColor(-1, 0x202020)
+    GUICtrlSetColor(-1, 0x88FF88)
+
     Global $stderrCtrl = GUICtrlCreateEdit("", 20, 780, 660, 100);
-    GUICtrlSetFont($stdoutCtrl, 10, 0, 0, "Consolas")
-    GUICtrlSetFont($stderrCtrl, 10, 0, 0, "Consolas")
-    GUICtrlSetBkColor($stdoutCtrl, 0x202020)
-    GUICtrlSetBkColor($stderrCtrl, 0x202020)
-    GUICtrlSetColor($stdoutCtrl, 0x88FF88)
-    GUICtrlSetColor($stderrCtrl, 0xFF8888)
-
-
-    ;GUICtrlSetData($stdoutCtrl, _ArrayToString($CmdLine, @CRLF), 1);
+    GUICtrlSetFont(-1, 10, 0, 0, "Consolas")
+    GUICtrlSetBkColor(-1, 0x202020)
+    GUICtrlSetColor(-1, 0xFF8888)
+    
     GUISetState(@SW_SHOW, $mainWindow) 
 endfunc
 
