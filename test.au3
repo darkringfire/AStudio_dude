@@ -175,11 +175,9 @@ func ReadFusesConf()
         $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
         for $i = 0 to UBound($fuseBytesList)-1
             $fuseByteName = $fuseBytesList[$i]
-            $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
-            
-            $fuseBytes($fuseByteName) = ObjCreate("Scripting.Dictionary")
-            $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
-            $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $i + 30, $posFuseTop, 30, 20)
+            $fuseByte = ObjCreate("Scripting.Dictionary")
+            $fuseByte("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
+            $fuseByte("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $i + 30, $posFuseTop, 30, 20)
             GUICtrlSetOnEvent(-1, "FuseByteMod")
             
             $fuseBitsList = IniRead($ini, $fuseByteName, "bits", "")
@@ -193,8 +191,9 @@ func ReadFusesConf()
                     GUICtrlSetOnEvent(-1, "FuseBitMod")
                     $fuseBits($fuseBitsList[$j]) = $fuseBit
                 next
-                $fuseBytes($fuseByteName)("bits") = $fuseBitsList
+                $fuseByte("bits") = $fuseBitsList
             endif
+            $fuseBytes($fuseByteName) = $fuseByte
         next
         
         $fuseOptionsList = IniRead($ini, "main", "options", "")
@@ -203,12 +202,12 @@ func ReadFusesConf()
             for $i = 0 to UBound($fuseOptionsList)-1
                 $fuseOptionName = $fuseOptionsList[$i]
                 
-                $fuseOptions($fuseOptionName) = ObjCreate("Scripting.Dictionary")
+                $fuseOption = ObjCreate("Scripting.Dictionary")
                 $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
                 $valuesStep = IniRead($ini, $fuseOptionName, "list", "")
                 $default = Int(IniRead($ini, $fuseOptionName, "default", "0"))
                 if ($valuesStep = "") then
-                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20)
+                    $fuseOption("ctrl") = GUICtrlCreateCheckbox($desc, $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20)
                     GUICtrlSetOnEvent(-1, "FuseOptionMod")
                 else
                     $valuesStep = Int($valuesStep)
@@ -220,7 +219,7 @@ func ReadFusesConf()
                         endif
                     next
                     
-                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+                    $fuseOption("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
                     GUICtrlSetOnEvent(-1, "FuseOptionMod")
                     for $j in $valuesList
                         if ($j = $default) then
@@ -231,6 +230,7 @@ func ReadFusesConf()
                     next
                     
                 endif
+                $fuseOptions($fuseOptionName) = $fuseOption
             next
         endif
 
