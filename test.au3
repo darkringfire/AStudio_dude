@@ -5,8 +5,6 @@
 #include <StringConstants.au3>
 #include <ComboConstants.au3>
 
-const $conf = "avrdude.ini"
-
 const $posLeft = 10
 const $posTop = 10
 const $posY = 20
@@ -24,25 +22,22 @@ const $posFuseStepX = 100
 const $posFuseTop = $posTop + $posV * 4
 
 
+global $conf = "\avrdude.ini"
 
-$programmer = ""
-$device = ""
-$project = ""
-$target = ""
-$auto = ""
-$hex = ""
-$eep = ""
+global $programmer = ""
+global $device = ""
 
-$programmers = ObjCreate("Scripting.Dictionary")
-$devices = ObjCreate("Scripting.Dictionary")
+global $hex = ""
+global $eep = ""
 
-$fuseBytes = ObjCreate("Scripting.Dictionary")
-$fuseBits = ObjCreate("Scripting.Dictionary")
-$fuseOptions = ObjCreate("Scripting.Dictionary")
+global $programmers = ObjCreate("Scripting.Dictionary")
+global $devices = ObjCreate("Scripting.Dictionary")
 
-$i = 1
+global $fuseBytes = ObjCreate("Scripting.Dictionary")
+global $fuseBits = ObjCreate("Scripting.Dictionary")
+global $fuseOptions = ObjCreate("Scripting.Dictionary")
 
-while ($i <= $CmdLine[0])
+for $i = 1 to $CmdLine[0]
     switch (StringLeft($CmdLine[$i], 2))
         case "-p"
             $project = StringTrimLeft($CmdLine[$i], 2)
@@ -51,22 +46,34 @@ while ($i <= $CmdLine[0])
         case "-a"
             $auto = StringTrimLeft($CmdLine[$i], 2)
     endswitch
-    $i += 1
-wend
+next
 
-if (FileExists($target & ".hex")) then
-    $hex = $target & ".hex"
+if IsDeclared("project") then
+    $conf = $project & $conf
+else
+    $conf = @UserProfileDir & $conf
 endif
-if (FileExists($target & ".eep")) then
-    $eep = $target & ".eep"
-endif
-
-
-ReadDudeConf()
 
 LoadProjectConf()
 
+if IsDeclared("target") then
+    $hex = $target & ".hex"
+    $eep = $target & ".eep"
+endif
+
+ReadDudeConf()
+
+if not $programmers.Exists($programmer) then
+    $programmer = $programmers.Keys[0]
+endif
+if not $devices.Exists($device) then
+    $device = $devices.Keys[0]
+endif
+
 InitGUI()
+
+ProgrammerApply()
+DeviceApply()
 
 
 While (1)
@@ -136,6 +143,9 @@ func ReadDudeConf()
         for $i = 0 to UBound($devArr)-1
             $devices($devArr[$i][0]) = $devArr[$i][1]
         next
+    else
+        MsgBox(0, "Error!", '"avrdude.conf" not found in script directory')
+        Exit
     endif
 endfunc
 
@@ -276,22 +286,22 @@ func InitGUI()
     Global $mainWindow = GUICreate("Main", 700, 900) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
     
-    Global $progCtrl = GUICtrlCreateCombo("", $posLeft, $posTop, $posProgX, $posY)
+    Global $progCtrl = GUICtrlCreateCombo("", $posLeft, $posTop, $posProgX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
     for $id in $programmers
-        GUICtrlSetData(-1, StringFormat("%s [%s]", $programmers($id), $id), 1)
+        $item = StringFormat("%s [%s]", $programmers($id), $id)
+        GUICtrlSetData(-1, $item, $id = $programmer ? $item : 0)
     next
-    ; GUICtrlSetData(-1, $programmer, $programmer)
-    GUICtrlSetOnEvent(-1, "HardwareApply")
+    GUICtrlSetOnEvent(-1, "ProgrammerApply")
 
-    Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posH, $posTop, $posDevX, $posY)
-    for $i in $devices
-        GUICtrlSetData(-1, StringFormat("%s [%s]", $devices($i), $i), 1)
+    Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posH, $posTop, $posDevX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+    for $id in $devices
+        $item = StringFormat("%s [%s]", $devices($id), $id)
+        GUICtrlSetData(-1, $item, $id = $device ? $item : 0)
     next
-    ; GUICtrlSetData(-1, $device, $device)
-    GUICtrlSetOnEvent(-1, "HardwareApply")
+    GUICtrlSetOnEvent(-1, "DeviceApply")
     
-    Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posH * 2, $posTop, $posButtonX, $posY)
-    GUICtrlSetOnEvent(-1, "HardwareApply")
+    ; Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posH * 2, $posTop, $posButtonX, $posY)
+    ; GUICtrlSetOnEvent(-1, "HardwareApply")
     
     Global $hexCtrl = GUICtrlCreateInput($hex, $posLeft + $posButtonX, $posTop + $posV, $posPathX, $posY)
     GUICtrlCreateLabel("HEX:", $posLeft, $posTop + $posV + 3, $posButtonX, $posY)
@@ -342,11 +352,15 @@ endfunc
 func LoadProjectConf()
     $programmer = IniRead($conf, "conf", "programmer", "")
     $device = IniRead($conf, "conf", "device", "")
+    $hex = IniRead($conf, "conf", "hex", "")
+    $eep = IniRead($conf, "conf", "eep", "")
 endfunc
 
 func SaveProjectConf()
     IniWrite($conf, "conf", "programmer", $programmer)
     IniWrite($conf, "conf", "device", $device)
+    IniWrite($conf, "conf", "hex", $hex)
+    IniWrite($conf, "conf", "eep", $eep)
 endfunc
 
 ; ================= CURRENT SETTINGS ====================================
@@ -368,20 +382,19 @@ func ExtractHardwareId($s)
     return StringStripWS(@error = 0 ? $match[0] : $s, $STR_STRIPALL)
 endfunc
 
-func HardwareApply()
+func ProgrammerApply()
     $programmer = ExtractHardwareId(GUICtrlRead($progCtrl))
+endfunc
+
+func DeviceApply()
     $device = ExtractHardwareId(GUICtrlRead($devCtrl))
-    ; $programmer = GUICtrlRead($progCtrl)
-    ; $device = GUICtrlRead($devCtrl)
-    ; $hex = GUICtrlRead($hexCtrl)
-    ; $eep = GUICtrlRead($eepCtrl)
     ReadFusesConf()
 endfunc
 
 Func CLOSEClicked() 
     If @GUI_WinHandle = $mainwindow Then 
         ; HardwareApply()
-        ; SaveProjectConf()
+        SaveProjectConf()
         Exit 
     EndIf 
 EndFunc
