@@ -7,7 +7,23 @@
 
 const $conf = "avrdude.ini"
 
-Opt("GUIOnEventMode", 1)  ; Включает режим OnEvent 
+const $posLeft = 10
+const $posTop = 10
+const $posY = 20
+const $posH = 5
+const $posV = 25
+const $posVs = 18
+
+const $posButtonX = 50
+const $posProgX = 400
+const $posDevX = 200
+const $posPathLeft = 30
+const $posPathX = 555
+
+const $posFuseStepX = 100
+const $posFuseTop = $posTop + $posV * 4
+
+
 
 $programmer = ""
 $device = ""
@@ -48,7 +64,7 @@ endif
 
 ReadDudeConf()
 
-ReadVars()
+LoadProjectConf()
 
 InitGUI()
 
@@ -57,7 +73,9 @@ While (1)
   Sleep(1000)
 WEnd 
 
-;---------------------------------------
+;=======================================================================
+;=======================================================================
+;=======================================================================
 
 func ReadDudeConf()
     Local $progArr[0][3]
@@ -111,8 +129,6 @@ func ReadDudeConf()
         
         _ArraySort($progArr, 0, 0, 0, 1)
         _ArraySort($devArr, 0, 0, 0, 1)
-        ;_ArrayDisplay($progArr)
-        ;_ArrayDisplay($devArr)
         
         for $i = 0 to UBound($progArr)-1
             $programmers($progArr[$i][0]) = $progArr[$i][1]
@@ -121,6 +137,100 @@ func ReadDudeConf()
             $devices($devArr[$i][0]) = $devArr[$i][1]
         next
     endif
+endfunc
+
+; ========================== FUSEs CONF ============================
+
+func ReadFusesConf()
+    
+    GUICtrlSetData($stdoutCtrl, "");
+    GUICtrlSetData($stderrCtrl, "")
+    
+    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
+    $arg = ""
+    
+    
+    for $i in $fuseBytes
+        GUICtrlDelete($fuseBytes($i)("ctrl"))
+        GUICtrlDelete($fuseBytes($i)("label"))
+    next
+    for $i in $fuseBits
+        GUICtrlDelete($fuseBits($i)("ctrl"))
+    next
+    for $i in $fuseOptions
+        GUICtrlDelete($fuseOptions($i)("ctrl"))
+    next
+    
+    $fuseBytes = ObjCreate("Scripting.Dictionary")
+    $fuseBits = ObjCreate("Scripting.Dictionary")
+    $fuseOptions = ObjCreate("Scripting.Dictionary")
+    if (FileExists($ini)) then
+        $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
+        for $i = 0 to UBound($fuseBytesList)-1
+            $fuseByteName = $fuseBytesList[$i]
+            $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
+            
+            $fuseBytes($fuseByteName) = ObjCreate("Scripting.Dictionary")
+            $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
+            $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $i + 30, $posFuseTop, 30, 20)
+            GUICtrlSetOnEvent(-1, "FuseByteMod")
+            
+            $fuseBitsList = IniRead($ini, $fuseByteName, "bits", "")
+            if ($fuseBitsList <> "") then
+                $fuseBitsList = StringSplit($fuseBitsList, ":", $STR_NOCOUNT)
+                for $j = 0 to UBound($fuseBitsList)-1
+                    $fuseBit = ObjCreate("Scripting.Dictionary")
+                    $fuseBit("fuse") = $fuseByteName
+                    $fuseBit("n") = $j
+                    $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posLeft + $posFuseStepX * $i, $posFuseTop + 10 + 18 * (8-$j), $posFuseStepX - 10, 20)
+                    GUICtrlSetOnEvent(-1, "FuseBitMod")
+                    $fuseBits($fuseBitsList[$j]) = $fuseBit
+                next
+                $fuseBytes($fuseByteName)("bits") = $fuseBitsList
+            endif
+        next
+        
+        $fuseOptionsList = IniRead($ini, "main", "options", "")
+        if ($fuseOptionsList <> "") then
+            $fuseOptionsList = StringSplit($fuseOptionsList, ":", $STR_NOCOUNT)
+            for $i = 0 to UBound($fuseOptionsList)-1
+                $fuseOptionName = $fuseOptionsList[$i]
+                
+                $fuseOptions($fuseOptionName) = ObjCreate("Scripting.Dictionary")
+                $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
+                $valuesStep = IniRead($ini, $fuseOptionName, "list", "")
+                $default = Int(IniRead($ini, $fuseOptionName, "default", "0"))
+                if ($valuesStep = "") then
+                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20)
+                    GUICtrlSetOnEvent(-1, "FuseOptionMod")
+                else
+                    $valuesStep = Int($valuesStep)
+                    $valuesSection = IniReadSection($ini, $fuseOptionName)
+                    $valuesList = ObjCreate("Scripting.Dictionary")
+                    for $j = 1 to $valuesSection[0][0]
+                        if (StringLeft($valuesSection[$j][0], 1) = "v") then
+                            $valuesList(Int(StringTrimLeft($valuesSection[$j][0], 1))) = $valuesSection[$j][1]
+                        endif
+                    next
+                    
+                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 180 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+                    GUICtrlSetOnEvent(-1, "FuseOptionMod")
+                    for $j in $valuesList
+                        if ($j = $default) then
+                            GUICtrlSetData(-1, $valuesList($j), $valuesList($j))
+                        else
+                            GUICtrlSetData(-1, $valuesList($j))
+                        endif
+                    next
+                    
+                endif
+            next
+        endif
+
+    else
+        MsgBox(0, "Warning", StringFormat('"%s" found', $ini))
+    endif
+    
 endfunc
 
 func DescInhetit(ByRef $Arr, $len = 20)
@@ -158,141 +268,42 @@ func DescInhetit(ByRef $Arr, $len = 20)
     until $count = 0
 endfunc
 
-func DudeCmd()
-    return StringFormat("%s\avrdude.exe -c %s -p %s ", @ScriptDir, $programmer, $device)
-endfunc
-
-func ReadFusesConf()
-    const $posFuseLeft = 20
-    const $posFuseStepX = 100
-    const $posFuseTop = 140
-    
-    GUICtrlSetData($stdoutCtrl, "");
-    GUICtrlSetData($stderrCtrl, "")
-    
-    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
-    $arg = ""
-    
-    
-    for $i in $fuseBytes
-        GUICtrlDelete($fuseBytes($i)("ctrl"))
-        GUICtrlDelete($fuseBytes($i)("label"))
-    next
-    for $i in $fuseBits
-        GUICtrlDelete($fuseBits($i)("ctrl"))
-    next
-    for $i in $fuseOptions
-        GUICtrlDelete($fuseOptions($i)("ctrl"))
-    next
-    
-    $fuseBytes = ObjCreate("Scripting.Dictionary")
-    $fuseBits = ObjCreate("Scripting.Dictionary")
-    $fuseOptions = ObjCreate("Scripting.Dictionary")
-    if (FileExists($ini)) then
-        $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
-        for $i = 0 to UBound($fuseBytesList)-1
-            $fuseByteName = $fuseBytesList[$i]
-            $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
-            
-            $fuseBytes($fuseByteName) = ObjCreate("Scripting.Dictionary")
-            $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
-            $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posFuseLeft + $posFuseStepX * $i + 30, $posFuseTop, 30, 20)
-            
-            $fuseBitsList = IniRead($ini, $fuseByteName, "bits", "")
-            if ($fuseBitsList <> "") then
-                $fuseBitsList = StringSplit($fuseBitsList, ":", $STR_NOCOUNT)
-                for $j = 0 to UBound($fuseBitsList)-1
-                    $fuseBit = ObjCreate("Scripting.Dictionary")
-                    $fuseBit("fuse") = $fuseByteName
-                    $fuseBit("n") = $j
-                    $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posFuseLeft + $posFuseStepX * $i, $posFuseTop + 10 + 18 * (8-$j), $posFuseStepX - 10, 20)
-                    $fuseBits($fuseBitsList[$j]) = $fuseBit
-                next
-                $fuseBytes($fuseByteName)("bits") = $fuseBitsList
-            endif
-        next
-        
-        $fuseOptionsList = IniRead($ini, "main", "options", "")
-        if ($fuseOptionsList <> "") then
-            $fuseOptionsList = StringSplit($fuseOptionsList, ":", $STR_NOCOUNT)
-            for $i = 0 to UBound($fuseOptionsList)-1
-                $fuseOptionName = $fuseOptionsList[$i]
-                
-                $fuseOptions($fuseOptionName) = ObjCreate("Scripting.Dictionary")
-                $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
-                $valuesStep = IniRead($ini, $fuseOptionName, "list", "")
-                $default = Int(IniRead($ini, $fuseOptionName, "default", "0"))
-                if ($valuesStep = "") then
-                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCheckbox($desc, $posFuseLeft, $posFuseTop + 180 + 21 * $i, 500, 20)
-                else
-                    $valuesStep = Int($valuesStep)
-                    $valuesSection = IniReadSection($ini, $fuseOptionName)
-                    $valuesList = ObjCreate("Scripting.Dictionary")
-                    for $j = 1 to $valuesSection[0][0]
-                        if (StringLeft($valuesSection[$j][0], 1) = "v") then
-                            $valuesList(Int(StringTrimLeft($valuesSection[$j][0], 1))) = $valuesSection[$j][1]
-                        endif
-                    next
-                    
-                    $fuseOptions($fuseOptionName)("ctrl") = GUICtrlCreateCombo("", $posFuseLeft, $posFuseTop + 180 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
-                    for $j in $valuesList
-                        if ($j = $default) then
-                            GUICtrlSetData(-1, $valuesList($j), $valuesList($j))
-                        else
-                            GUICtrlSetData(-1, $valuesList($j))
-                        endif
-                    next
-                    
-                    ;for $j in $valuesList
-                    ;    GUICtrlSetData($stdoutCtrl, $j & " = " & $valuesList($j) & @CRLF, 1);
-                    ;next
-                    
-                endif
-            next
-        endif
-
-        ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
-        
-        ;GUICtrlSetData($stderrCtrl, "")
-        ;while ProcessExists($pid)
-        ;    GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
-        ;wend
-        
-        ;GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
-        ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
-    else
-        MsgBox(0, "Warning", "Ini file for this device not found")
-    endif
-    
-endfunc
+; =================== GUI ===========================
 
 func InitGUI()
+    Opt("GUIOnEventMode", 1)
+    
     Global $mainWindow = GUICreate("Main", 700, 900) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
-
-    Global $progCtrl = GUICtrlCreateCombo("", 20, 20, 400)
+    
+    Global $progCtrl = GUICtrlCreateCombo("", $posLeft, $posTop, $posProgX, $posY)
     for $id in $programmers
         GUICtrlSetData(-1, StringFormat("%s [%s]", $programmers($id), $id), 1)
     next
     ; GUICtrlSetData(-1, $programmer, $programmer)
+    GUICtrlSetOnEvent(-1, "HardwareApply")
 
-    Global $devCtrl = GUICtrlCreateCombo("", 430, 20, 200)
+    Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posH, $posTop, $posDevX, $posY)
     for $i in $devices
         GUICtrlSetData(-1, StringFormat("%s [%s]", $devices($i), $i), 1)
     next
-    ;GUICtrlSetData(-1, $device, $device)
-    ;GUICtrlSetOnEvent($progCtrl, "UpdateVars")
-    ;GUICtrlSetOnEvent($devCtrl, "UpdateVars")
+    ; GUICtrlSetData(-1, $device, $device)
+    GUICtrlSetOnEvent(-1, "HardwareApply")
     
+    Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posH * 2, $posTop, $posButtonX, $posY)
+    GUICtrlSetOnEvent(-1, "HardwareApply")
+    
+    Global $hexCtrl = GUICtrlCreateInput($hex, $posLeft + $posButtonX, $posTop + $posV, $posPathX, $posY)
+    GUICtrlCreateLabel("HEX:", $posLeft, $posTop + $posV + 3, $posButtonX, $posY)
+    Global $eepCtrl = GUICtrlCreateInput($eep, $posLeft + $posButtonX, $posTop + $posV * 2, $posPathX, $posY)
+    GUICtrlCreateLabel("EEP:", $posLeft, $posTop + $posV * 2 + 3, $posButtonX, $posY)
 
-    Global $hexCtrl = GUICtrlCreateInput($hex, 20, 50, 600)
-    Global $eepCtrl = GUICtrlCreateInput($eep, 20, 80, 600)
-
-    Global $readFusesButton = GUICtrlCreateButton("Read", 20, 110, 50)
-    ;GUICtrlSetState(-1, $GUI_DISABLE)
+    GUICtrlCreateLabel("Fuses:", $posLeft, $posTop + $posV * 3 + 3, $posButtonX, $posY)
+    Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posTop + $posV * 3, $posButtonX, $posY)
+    GUICtrlSetOnEvent(-1, "ReadFuses")
 
     ;Global $writeFusesButton = GUICtrlCreateButton("Write", 80, 110, 50)
-    ;GUICtrlSetOnEvent(-1, "ReadFusesConf")
+    ;GUICtrlSetState(-1, $GUI_DISABLE)
 
     Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 670, 660, 100);
     GUICtrlSetFont(-1, 10, 0, 0, "Consolas")
@@ -307,30 +318,70 @@ func InitGUI()
     GUISetState(@SW_SHOW, $mainWindow) 
 endfunc
 
-func ReadVars()
+; ========== WORK WITH AVRDUDE =================================================
+
+func DudeCmd()
+    return StringFormat("%s\avrdude.exe -c %s -p %s ", @ScriptDir, $programmer, $device)
+endfunc
+
+func ReadFuses()
+    MsgBox(0,0,"Read fuses")
+        ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
+        
+        ;GUICtrlSetData($stderrCtrl, "")
+        ;while ProcessExists($pid)
+        ;    GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
+        ;wend
+        
+        ;GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
+        ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
+endfunc
+
+; ========= CONFIGS ======================================
+
+func LoadProjectConf()
     $programmer = IniRead($conf, "conf", "programmer", "")
     $device = IniRead($conf, "conf", "device", "")
 endfunc
 
-func WriteVars()
+func SaveProjectConf()
     IniWrite($conf, "conf", "programmer", $programmer)
     IniWrite($conf, "conf", "device", $device)
 endfunc
 
-func UpdateVars()
-    switch (@GUI_CtrlId)
-        case 0
-    endswitch
-    $programmer = GUICtrlRead($progCtrl)
-    $device= GUICtrlRead($devCtrl)
-    $hex= GUICtrlRead($hexCtrl)
-    $eep= GUICtrlRead($eepCtrl)
+; ================= CURRENT SETTINGS ====================================
+
+func FuseByteMod()
+    MsgBox(0,0,"Fuse byte mod")
+endfunc
+
+func FuseBitMod()
+    MsgBox(0,0,"Fuse bit mod")
+endfunc
+
+func FuseOptionMod()
+    MsgBox(0,0,"Fuse option mod")
+endfunc
+
+func ExtractHardwareId($s)
+    local $match = StringRegExp($s, ".*\[(.+?)\]", $STR_REGEXPARRAYMATCH)
+    return StringStripWS(@error = 0 ? $match[0] : $s, $STR_STRIPALL)
+endfunc
+
+func HardwareApply()
+    $programmer = ExtractHardwareId(GUICtrlRead($progCtrl))
+    $device = ExtractHardwareId(GUICtrlRead($devCtrl))
+    ; $programmer = GUICtrlRead($progCtrl)
+    ; $device = GUICtrlRead($devCtrl)
+    ; $hex = GUICtrlRead($hexCtrl)
+    ; $eep = GUICtrlRead($eepCtrl)
+    ReadFusesConf()
 endfunc
 
 Func CLOSEClicked() 
     If @GUI_WinHandle = $mainwindow Then 
-        UpdateVars()
-        WriteVars()
+        ; HardwareApply()
+        ; SaveProjectConf()
         Exit 
     EndIf 
 EndFunc
