@@ -153,9 +153,6 @@ endfunc
 
 func ReadFusesConf()
     
-    GUICtrlSetData($stdoutCtrl, "");
-    GUICtrlSetData($stderrCtrl, "")
-    
     $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
     $arg = ""
     
@@ -335,6 +332,9 @@ func DudeCmd()
 endfunc
 
 func ReadFuses()
+    GUICtrlSetData($stdoutCtrl, "");
+    GUICtrlSetData($stderrCtrl, "")
+    
     MsgBox(0,0,"Read fuses")
         ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
         
