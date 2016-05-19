@@ -37,7 +37,6 @@ global $programmers = ObjCreate("Scripting.Dictionary")
 global $devices = ObjCreate("Scripting.Dictionary")
 
 global $fuseBytes = ObjCreate("Scripting.Dictionary")
-;global $fuseBits = ObjCreate("Scripting.Dictionary")
 global $fuseOptions = ObjCreate("Scripting.Dictionary")
 global $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
 global $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
@@ -242,10 +241,9 @@ func BitsGUIToFuses()
     $fuseValues = ObjCreate("Scripting.Dictionary")
     for $byteName in $fuseBytes
         $fuseVal = 0
-
-        for $bitN in $fuseBytes($byteName)("bits")
-            $bit = $fuseBytes($byteName)("bits")($bitN)
-            if GUICtrlRead($bit("ctrl")) = $GUI_UNCHECKED then
+        $bits = $fuseBytes($byteName)("bits")
+        for $bitN = 0 to 7
+            if not $bits.Exists($bitN) or GUICtrlRead($bits($bitN)("ctrl")) = $GUI_UNCHECKED then
                 $fuseVal = BitOR($fuseVal, BitShift(1, -$bitN))
             endif
         next
@@ -257,16 +255,16 @@ endfunc
 func OptionsGUIToFuses()
     $fuseValues = ObjCreate("Scripting.Dictionary")
     for $byteName in $fuseBytes
-        $fuseValues($byteName) = 0
+        $fuseValues($byteName) = 0xFF
     next
 
     for $optionName in $fuseOptions
         $option = $fuseOptions($optionName)
         if $option.Exists("list") then
-            $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $fuseOptionsValues(GUICtrlRead($option("ctrl"))))
+            $fuseValues($option("fuse")) = BitAND($fuseValues($option("fuse")), BitOR(BitNOT($option("mask")), $fuseOptionsValues(GUICtrlRead($option("ctrl")))))
         else
-            if GUICtrlRead($option("ctrl")) = $GUI_UNCHECKED then
-                $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $option("mask"))
+            if GUICtrlRead($option("ctrl")) = $GUI_CHECKED then
+                $fuseValues($option("fuse")) = BitAND($fuseValues($option("fuse")), BitNOT($option("mask")))
             endif
         endif
     next
