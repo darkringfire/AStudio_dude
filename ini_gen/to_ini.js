@@ -77,7 +77,7 @@ function create_interface(){
 		}
 		var bits = fuse_defs[fuse]["bits"];
 		var mul = 1;
-		var defVal = 0;
+		var defVal = 0xFF;
         // alert($.isArray(bits));
         for (var i = 0; i < 8; i++) {
             // alert(typeof bits[i]);
@@ -85,8 +85,8 @@ function create_interface(){
                 iniArr["main"][dudefuse].push("");
             } else {
                 iniArr["main"][dudefuse].push(bits[i].name);
-                if (bits[i].default_value == "1") {
-                    defVal += mul;
+                if (bits[i].default_value == "0") {
+                    defVal -= mul;
                 }
             }
             mul *= 2;
