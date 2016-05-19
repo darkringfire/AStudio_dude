@@ -363,6 +363,8 @@ endfunc
 ; ================= Show FUSEs GUI =============================
 
 func FuseGUI()
+    GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
+    
     $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posTop + 3 + $posV * 5, 60, 20)
     GUICtrlSetColor(-1, 0x880000)
     GUICtrlSetFont(-1, 9, $FW_BOLD)
@@ -441,16 +443,17 @@ func InitGUI()
     Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posTop + $posV * 3, $posButtonX, $posY)
     GUICtrlSetOnEvent(-1, "ReadFuses")
 
-    ;Global $writeFusesButton = GUICtrlCreateButton("Write", 80, 110, 50)
-    ;GUICtrlSetState(-1, $GUI_DISABLE)
+    Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posH + $posButtonX * 2, $posTop + $posV * 3, $posButtonX, $posY)
+    GUICtrlSetState(-1, $GUI_DISABLE)
+    GUICtrlSetOnEvent(-1, "WriteFuses")
 
     Global $stdoutCtrl = GUICtrlCreateEdit("", 20, 670, 660, 100);
-    GUICtrlSetFont(-1, 10, 0, 0, "Consolas")
+    GUICtrlSetFont(-1, 8, 0, 0, "Consolas")
     GUICtrlSetBkColor(-1, 0x202020)
     GUICtrlSetColor(-1, 0x88FF88)
 
     Global $stderrCtrl = GUICtrlCreateEdit("", 20, 780, 660, 100);
-    GUICtrlSetFont(-1, 10, 0, 0, "Consolas")
+    GUICtrlSetFont(-1, 8, 0, 0, "Consolas")
     GUICtrlSetBkColor(-1, 0x202020)
     GUICtrlSetColor(-1, 0xFF8888)
     
@@ -464,21 +467,58 @@ func DudeCmd()
 endfunc
 
 func ReadFuses()
-    GUICtrlSetData($stdoutCtrl, "");
+    GUICtrlSetData($stdoutCtrl, "")
     GUICtrlSetData($stderrCtrl, "")
     
-    MsgBox(0,0,"Read fuses")
-        ;$pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
-        
-        ;GUICtrlSetData($stderrCtrl, "")
-        ;while ProcessExists($pid)
-        ;    GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
-        ;wend
-        
-        ;GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
-        ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
+    $arg = StringFormat(" -c %s -p %s", $programmer, $device)
+    $n = 0
+    for $fuseByteName in $fuseBytes
+        $n += 1
+        $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
+    next
+    
+    GUICtrlSetData($stdoutCtrl, DudeCmd() & $arg & @CRLF, 1);
+    
+    $pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
+    
+    while ProcessExists($pid)
+        GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
+    wend
+    
+    $outArr = StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT)
+    if $outArr[0] - 1 = $n then
+        $n = 0
+        for $fuseByteName in $fuseBytes
+            $n += 1
+            $fuseBytes($fuseByteName)("value") = Int($outArr[$n])
+        next
+        GUICtrlSetState($writeFusesButton, $GUI_ENABLE)
+    endif
+    
+    FusesToGUI()
+    ; GUICtrlSetData($stdoutCtrl, _ArrayToString(StringSplit(StdoutRead($pid), @CRLF, $STR_ENTIRESPLIT), "~"), 1);
+    ;GUICtrlSetData($stdoutCtrl, StdoutRead($pid), 1);
+    
 endfunc
 
+func WriteFuses()
+    GUICtrlSetData($stdoutCtrl, "")
+    GUICtrlSetData($stderrCtrl, "")
+
+    $arg = StringFormat(" -c %s -p %s", $programmer, $device)
+
+    for $fuseByteName in $fuseBytes
+        $arg &= StringFormat(" -U %s:w:%s:m", $fuseByteName, "0x" & Hex($fuseBytes($fuseByteName)("value"), 2))
+    next
+    
+    GUICtrlSetData($stdoutCtrl, DudeCmd() & $arg & @CRLF, 1);
+    $pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD)
+    
+    while ProcessExists($pid)
+        GUICtrlSetData($stderrCtrl, StderrRead($pid), 1)
+    wend
+    
+endfunc
 ; ========= CONFIGS ======================================
 
 func LoadProjectConf()
