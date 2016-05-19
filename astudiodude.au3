@@ -22,6 +22,8 @@ const $posPathX = 555
 const $posFuseStepX = 100
 const $posFuseTop = $posTop + $posV * 4
 
+const $posOptionX = 650
+
 
 global $conf = "\avrdude.ini"
 
@@ -35,7 +37,7 @@ global $programmers = ObjCreate("Scripting.Dictionary")
 global $devices = ObjCreate("Scripting.Dictionary")
 
 global $fuseBytes = ObjCreate("Scripting.Dictionary")
-global $fuseBits = ObjCreate("Scripting.Dictionary")
+;global $fuseBits = ObjCreate("Scripting.Dictionary")
 global $fuseOptions = ObjCreate("Scripting.Dictionary")
 global $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
 global $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
@@ -85,7 +87,8 @@ WEnd
 
 ;=======================================================================
 ;=======================================================================
-;=======================================================================
+
+;==================== READ DUDE CONF ===================================================
 
 func ReadDudeConf()
     Local $progArr[0][3]
@@ -152,198 +155,7 @@ func ReadDudeConf()
     endif
 endfunc
 
-; ========================== FUSEs GUI ===========================
-
-func FusesToGUI()
-    for $id in $fuseBytes
-        GUICtrlSetData($fuseBytes($id)("ctrl"), "0x" & Hex($fuseBytes($id)("value"), 2))
-    next
-    for $id in $fuseBits
-        $bit = $fuseBits($id)
-        if BitAND($fuseBytes($bit("fuse"))("value"), BitShift(1, -$bit("n"))) = 0 then
-            GUICtrlSetState($bit("ctrl"), $GUI_CHECKED)
-        else
-            GUICtrlSetState($bit("ctrl"), $GUI_UNCHECKED)
-        endif
-    next
-    for $id in $fuseOptions
-        $option = $fuseOptions($id)
-        $fuse = $fuseBytes($option("fuse"))
-        $value = BitAND($fuse("value"), $option("mask"))
-        if $option("select") = 0 then
-            if $value = 0 then
-                GUICtrlSetState($option("ctrl"), $GUI_CHECKED)
-            else
-                GUICtrlSetState($option("ctrl"), $GUI_UNCHECKED)
-            endif
-        else
-            if $option("list").Exists($value) then
-                GUICtrlSetData($option("ctrl"), $option("list")($value), $option("list")($value))
-            else
-                $optionName = "RESERVED [" & $value & "]"
-                GUICtrlSetData($option("ctrl"), $optionName, $optionName)
-                $fuseOptionsValues($optionName) = $value
-            endif
-        endif
-    next
-endfunc
-
-func BytesGUIToFuses()
-    for $id in $fuseBytes
-        $value = GUICtrlRead($fuseBytes($id)("ctrl"))
-        if StringIsIntHex($value) then
-            $fuseBytes($id)("value") = Int($value)
-        endif
-    next
-endfunc
-
-func BitsGUIToFuses()
-    $fuseValues = ObjCreate("Scripting.Dictionary")
-    for $byteName in $fuseBytes
-        $fuseValues($byteName) = 0
-    next
-    for $bitName in $fuseBits
-        $bit = $fuseBits($bitName)
-        if GUICtrlRead($bit("ctrl")) = $GUI_UNCHECKED then
-            $fuseValues($bit("fuse")) = BitOR($fuseValues($bit("fuse")), BitShift(1, -$bit("n")))
-        endif
-    next
-    for $byteName in $fuseBytes
-        $fuseBytes($byteName)("value") = $fuseValues($byteName)
-    next
-endfunc
-
-func OptionsGUIToFuses()
-    $fuseValues = ObjCreate("Scripting.Dictionary")
-    for $byteName in $fuseBytes
-        $fuseValues($byteName) = 0
-    next
-
-    for $optionName in $fuseOptions
-        $option = $fuseOptions($optionName)
-        if $option.Exists("list") then
-            $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $fuseOptionsValues(GUICtrlRead($option("ctrl"))))
-        else
-            if GUICtrlRead($option("ctrl")) = $GUI_UNCHECKED then
-                $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $option("mask"))
-            endif
-        endif
-    next
-
-    for $byteName in $fuseBytes
-        $fuseBytes($byteName)("value") = $fuseValues($byteName)
-    next
-endfunc
-
-; ========================== FUSEs CONF ============================
-
-func ReadFusesConf()
-    
-    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
-    $arg = ""
-    
-    
-    for $i in $fuseBytes
-        GUICtrlDelete($fuseBytes($i)("ctrl"))
-        GUICtrlDelete($fuseBytes($i)("label"))
-    next
-    for $i in $fuseBits
-        GUICtrlDelete($fuseBits($i)("ctrl"))
-    next
-    for $i in $fuseOptions
-        GUICtrlDelete($fuseOptions($i)("ctrl"))
-    next
-    for $i in $fuseInfoCtrls
-        GUICtrlDelete($fuseInfoCtrls($i))
-    next
-    
-    $fuseBytes = ObjCreate("Scripting.Dictionary")
-    $fuseBits = ObjCreate("Scripting.Dictionary")
-    $fuseOptions = ObjCreate("Scripting.Dictionary")
-    $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
-    $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
-    if (FileExists($ini)) then
-        $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
-        $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posTop + 3 + $posV * 5, 60, 20)
-        
-        for $i = 0 to UBound($fuseBytesList)-1
-            $fuseByteName = $fuseBytesList[$i]
-            $fuseByte = ObjCreate("Scripting.Dictionary")
-            $fuseByte("value") = Int(IniRead($ini, "default", $fuseByteName, 255))
-            $fuseByte("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $i, $posFuseTop + 5, 40, 20)
-            $fuseByte("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $i + 30, $posFuseTop, 40, 20)
-            GUICtrlSetOnEvent(-1, "FuseByteMod")
-            $fuseBytes($fuseByteName) = $fuseByte
-        next
-
-        $fuseInfoCtrls("label") = GUICtrlCreateLabel("WARNING!", $posLeft, $posTop + 3 + $posV * 5, 60, 20)
-        GUICtrlSetColor(-1, 0x880000)
-        GUICtrlSetFont(-1, 9, $FW_BOLD)
-        $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0", $posLeft + 65, $posTop + $posV * 5, 40, 20)
-        GUICtrlSetState(-1, $GUI_CHECKED + $GUI_DISABLE)
-        $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1", $posLeft + 105, $posTop + $posV * 5, 40, 20)
-        GUICtrlSetState(-1, $GUI_UNCHECKED + $GUI_DISABLE)
-
-        for $i = 0 to UBound($fuseBytesList)-1
-            $fuseByteName = $fuseBytesList[$i]
-            $fuseBitsList = IniRead($ini, "main", $fuseByteName, "")
-            if ($fuseBitsList <> "") then
-                $fuseBitsList = StringSplit($fuseBitsList, ":", $STR_NOCOUNT)
-                for $j = 0 to UBound($fuseBitsList)-1
-                    $fuseBit = ObjCreate("Scripting.Dictionary")
-                    $fuseBit("fuse") = $fuseByteName
-                    $fuseBit("n") = $j
-                    $fuseBit("ctrl") = GUICtrlCreateCheckbox($fuseBitsList[$j], $posLeft + $posFuseStepX * $i, $posFuseTop + 30 + 18 * (8-$j), $posFuseStepX - 10, 20)
-                    GUICtrlSetOnEvent(-1, "FuseBitMod")
-                    $fuseBits($fuseBitsList[$j]) = $fuseBit
-                next
-                $fuseBytes($fuseByteName)("bits") = $fuseBitsList
-            endif
-        next
-        
-        $fuseOptionsList = IniRead($ini, "main", "options", "")
-        if ($fuseOptionsList <> "") then
-            $fuseOptionsList = StringSplit($fuseOptionsList, ":", $STR_NOCOUNT)
-            for $i = 0 to UBound($fuseOptionsList)-1
-                $fuseOptionName = $fuseOptionsList[$i]
-                
-                $fuseOption = ObjCreate("Scripting.Dictionary")
-                $fuseOption("fuse") = IniRead($ini, $fuseOptionName, "fuse", "")
-                $fuseOption("mask") = Int(IniRead($ini, $fuseOptionName, "mask", 0))
-                $desc = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
-                $select = Int(IniRead($ini, $fuseOptionName, "select", 0))
-                $fuseOption("select") = Int($select)
-                if ($select = 0) then
-                    $fuseOption("ctrl") = GUICtrlCreateCheckbox($desc, $posLeft, $posFuseTop + 200 + 21 * $i, 500, 20)
-                    GUICtrlSetOnEvent(-1, "FuseOptionMod")
-                else
-                    $valuesSection = IniReadSection($ini, $fuseOptionName)
-                    $valuesList = ObjCreate("Scripting.Dictionary")
-                    for $j = 1 to $valuesSection[0][0]
-                        if (StringLeft($valuesSection[$j][0], 1) = "v") then
-                            $value = Int(StringTrimLeft($valuesSection[$j][0], 1))
-                            $fuseOptionsValues($valuesSection[$j][1]) = $value
-                            $valuesList($value) = $valuesSection[$j][1]
-                        endif
-                    next
-                    
-                    $fuseOption("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 199 + 21 * $i, 500, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
-                    $fuseOption("list") = $valuesList
-                    GUICtrlSetOnEvent(-1, "FuseOptionMod")
-                    for $j in $valuesList
-                        GUICtrlSetData(-1, $valuesList($j))
-                    next
-                    
-                endif
-                $fuseOptions($fuseOptionName) = $fuseOption
-            next
-        endif
-
-    else
-        MsgBox(0, "Warning", StringFormat('"%s" found', $ini))
-    endif
-    
-endfunc
+; ------------------- inherit hw descriptions ---------------------
 
 func DescInhetit(ByRef $Arr, $len = 20)
     local $arrById = ObjCreate("Scripting.Dictionary")
@@ -380,7 +192,224 @@ func DescInhetit(ByRef $Arr, $len = 20)
     until $count = 0
 endfunc
 
-; =================== GUI ===========================
+; ========================== FUSEs GUI ===========================
+
+func FusesToGUI()
+    for $byteName in $fuseBytes
+        $byte = $fuseBytes($byteName)
+        GUICtrlSetData($byte("ctrl"), "0x" & Hex($byte("value"), 2))
+        for $bitN in $byte("bits")
+            $bit = $byte("bits")($bitN)
+            if BitAND($byte("value"), BitShift(1, -$bitN)) = 0 then
+                GUICtrlSetState($bit("ctrl"), $GUI_CHECKED)
+            else
+                GUICtrlSetState($bit("ctrl"), $GUI_UNCHECKED)
+            endif
+        next
+    next
+    for $id in $fuseOptions
+        $option = $fuseOptions($id)
+        $fuse = $fuseBytes($option("fuse"))
+        $value = BitAND($fuse("value"), $option("mask"))
+        if $option("select") = 0 then
+            if $value = 0 then
+                GUICtrlSetState($option("ctrl"), $GUI_CHECKED)
+            else
+                GUICtrlSetState($option("ctrl"), $GUI_UNCHECKED)
+            endif
+        else
+            if $option("list").Exists($value) then
+                GUICtrlSetData($option("ctrl"), $option("list")($value), $option("list")($value))
+            else
+                $optionName = "RESERVED [" & $value & "]"
+                GUICtrlSetData($option("ctrl"), $optionName, $optionName)
+                $fuseOptionsValues($optionName) = $value
+            endif
+        endif
+    next
+endfunc
+
+func BytesGUIToFuses()
+    for $id in $fuseBytes
+        $value = GUICtrlRead($fuseBytes($id)("ctrl"))
+        if StringIsIntHex($value) then
+            $fuseBytes($id)("value") = Int($value)
+        endif
+    next
+endfunc
+
+func BitsGUIToFuses()
+    $fuseValues = ObjCreate("Scripting.Dictionary")
+    for $byteName in $fuseBytes
+        $fuseVal = 0
+
+        for $bitN in $fuseBytes($byteName)("bits")
+            $bit = $fuseBytes($byteName)("bits")($bitN)
+            if GUICtrlRead($bit("ctrl")) = $GUI_UNCHECKED then
+                $fuseVal = BitOR($fuseVal, BitShift(1, -$bitN))
+            endif
+        next
+
+        $fuseBytes($byteName)("value") = $fuseVal
+    next
+endfunc
+
+func OptionsGUIToFuses()
+    $fuseValues = ObjCreate("Scripting.Dictionary")
+    for $byteName in $fuseBytes
+        $fuseValues($byteName) = 0
+    next
+
+    for $optionName in $fuseOptions
+        $option = $fuseOptions($optionName)
+        if $option.Exists("list") then
+            $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $fuseOptionsValues(GUICtrlRead($option("ctrl"))))
+        else
+            if GUICtrlRead($option("ctrl")) = $GUI_UNCHECKED then
+                $fuseValues($option("fuse")) = BitOR($fuseValues($option("fuse")), $option("mask"))
+            endif
+        endif
+    next
+
+    for $byteName in $fuseBytes
+        $fuseBytes($byteName)("value") = $fuseValues($byteName)
+    next
+endfunc
+
+; ========================== FUSEs CONF ============================
+
+func ReadFusesConf()
+    
+    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
+    $arg = ""
+    
+    
+    for $byteName in $fuseBytes
+        GUICtrlDelete($fuseBytes($byteName)("ctrl"))
+        GUICtrlDelete($fuseBytes($byteName)("label"))
+        $bits = $fuseBytes($byteName)("bits")
+        for $bitN in $bits
+            GUICtrlDelete($bits($bitN)("ctrl"))
+        next
+    next
+    for $i in $fuseOptions
+        GUICtrlDelete($fuseOptions($i)("ctrl"))
+    next
+    for $i in $fuseInfoCtrls
+        GUICtrlDelete($fuseInfoCtrls($i))
+    next
+    
+    $fuseBytes = ObjCreate("Scripting.Dictionary")
+    $fuseOptions = ObjCreate("Scripting.Dictionary")
+    $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
+    $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
+    if (FileExists($ini)) then
+        $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
+        
+        for $i = 0 to UBound($fuseBytesList)-1
+            $fuseByteName = $fuseBytesList[$i]
+            $fuseByte = ObjCreate("Scripting.Dictionary")
+            $fuseByte("value") = Int(IniRead($ini, "default", $fuseByteName, 255))
+            
+            $bits = ObjCreate("Scripting.Dictionary")
+            $fuseBitsList = IniRead($ini, "main", $fuseByteName, "")
+            if ($fuseBitsList <> "") then
+                $fuseBitsList = StringSplit($fuseBitsList, ":", $STR_NOCOUNT)
+                for $j = 0 to UBound($fuseBitsList)-1
+                    if $fuseBitsList[$j] <> "" then
+                        $fuseBit = ObjCreate("Scripting.Dictionary")
+                        $fuseBit("name") = $fuseBitsList[$j]
+                        $bits($j) = $fuseBit
+                    endif
+                next
+            endif
+            
+            $fuseByte("bits") = $bits
+            
+            $fuseBytes($fuseByteName) = $fuseByte
+        next
+
+        $fuseOptionsList = IniRead($ini, "main", "options", "")
+        if ($fuseOptionsList <> "") then
+            $fuseOptionsList = StringSplit($fuseOptionsList, ":", $STR_NOCOUNT)
+            for $i = 0 to UBound($fuseOptionsList)-1
+                $fuseOptionName = $fuseOptionsList[$i]
+                
+                $fuseOption = ObjCreate("Scripting.Dictionary")
+                $fuseOption("fuse") = IniRead($ini, $fuseOptionName, "fuse", "")
+                $fuseOption("mask") = Int(IniRead($ini, $fuseOptionName, "mask", 0))
+                $fuseOption("desc") = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
+                $select = Int(IniRead($ini, $fuseOptionName, "select", 0))
+                $fuseOption("select") = $select
+                if $select <> 0 then
+                    $valuesSection = IniReadSection($ini, $fuseOptionName)
+                    $valuesList = ObjCreate("Scripting.Dictionary")
+                    for $j = 1 to $valuesSection[0][0]
+                        if (StringLeft($valuesSection[$j][0], 1) = "v") then
+                            $value = Int(StringTrimLeft($valuesSection[$j][0], 1))
+                            $fuseOptionsValues($valuesSection[$j][1]) = $value
+                            $valuesList($value) = $valuesSection[$j][1]
+                        endif
+                    next
+                    $fuseOption("list") = $valuesList
+                endif
+                $fuseOptions($fuseOptionName) = $fuseOption
+            next
+        endif
+
+    else
+        MsgBox(0, "Warning", StringFormat('"%s" found', $ini))
+    endif
+endfunc
+
+; ================= Show FUSEs GUI =============================
+
+func FuseGUI()
+    $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posTop + 3 + $posV * 5, 60, 20)
+    GUICtrlSetColor(-1, 0x880000)
+    GUICtrlSetFont(-1, 9, $FW_BOLD)
+    $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0", $posLeft + 65, $posTop + $posV * 5, 40, 20)
+    GUICtrlSetState(-1, $GUI_CHECKED + $GUI_DISABLE)
+    $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1", $posLeft + 105, $posTop + $posV * 5, 40, 20)
+    GUICtrlSetState(-1, $GUI_UNCHECKED + $GUI_DISABLE)
+
+    $byteN = 0
+    for $fuseByteName in $fuseBytes
+        $bits = $fuseBytes($fuseByteName)("bits")
+        $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $byteN, $posFuseTop + 5, 40, 20)
+        $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $byteN + 30, $posFuseTop, 40, 20)
+        GUICtrlSetOnEvent(-1, "FuseByteMod")
+        
+        for $bitN in $bits
+            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bits($bitN)("name"), $posLeft + $posFuseStepX * $byteN, $posFuseTop + 30 + 18 * (8-$bitN), $posFuseStepX - 10, 20)
+            GUICtrlSetOnEvent(-1, "FuseBitMod")
+        next
+        $fuseBytes($fuseByteName)("bits") = $bits
+
+        $byteN += 1
+    next
+    
+    $optN = 0
+    for $optionName in $fuseOptions
+        $fuseOption = $fuseOptions($optionName)
+        
+        if $fuseOption("select") = 0 then
+            $fuseOption("ctrl") = GUICtrlCreateCheckbox($fuseOption("desc"), $posLeft, $posFuseTop + 200 + 21 * $optN, $posOptionX, 20)
+            GUICtrlSetOnEvent(-1, "FuseOptionMod")
+        else
+            $fuseOption("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 199 + 21 * $optN, $posOptionX, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+            GUICtrlSetOnEvent(-1, "FuseOptionMod")
+            for $val in $fuseOption("list")
+                GUICtrlSetData(-1, $fuseOption("list")($val))
+            next
+        endif
+        
+        $fuseOptions($optionName) = $fuseOption
+        $optN +=1
+    next
+endfunc
+
+; =================== Init Main GUI ===========================
 
 func InitGUI()
     Opt("GUIOnEventMode", 1)
@@ -470,21 +499,6 @@ endfunc
 
 ; ================= CURRENT SETTINGS ====================================
 
-func FuseByteMod()
-    BytesGUIToFuses()
-    FusesToGUI()
-endfunc
-
-func FuseBitMod()
-    BitsGUIToFuses()
-    FusesToGUI()
-endfunc
-
-func FuseOptionMod()
-    OptionsGUIToFuses()
-    FusesToGUI()
-endfunc
-
 func ExtractHardwareId($s)
     local $match = StringRegExp($s, ".*\[(.+?)\]", $STR_REGEXPARRAYMATCH)
     return StringStripWS(@error = 0 ? $match[0] : $s, $STR_STRIPALL)
@@ -501,8 +515,11 @@ endfunc
 func DeviceApply()
     $device = ExtractHardwareId(GUICtrlRead($devCtrl))
     ReadFusesConf()
+    FuseGUI()
     FusesToGUI()
 endfunc
+
+; ==================== Events Handlers ======================
 
 Func CLOSEClicked() 
     If @GUI_WinHandle = $mainwindow Then 
@@ -511,4 +528,19 @@ Func CLOSEClicked()
         Exit 
     EndIf 
 EndFunc
+
+func FuseByteMod()
+    BytesGUIToFuses()
+    FusesToGUI()
+endfunc
+
+func FuseBitMod()
+    BitsGUIToFuses()
+    FusesToGUI()
+endfunc
+
+func FuseOptionMod()
+    OptionsGUIToFuses()
+    FusesToGUI()
+endfunc
 

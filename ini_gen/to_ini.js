@@ -28,7 +28,14 @@
 	}
 	$part.change(function(){
 		partName = $part.val();
-		$file.val(partName+".ini");
+        iniName = partName.toLowerCase();
+        iniName = iniName.replace("attiny", "t");
+        iniName = iniName.replace("atmega", "m");
+        iniName = iniName.replace("atxmega", "x");
+        iniName = iniName.replace("at90can", "c");
+        iniName = iniName.replace("at90s", "");
+        iniName = iniName.replace("at90", "");
+		$file.val(iniName+".ini");
 		var script = document.createElement('script');
 		script.setAttribute('src', 'js/' + partName + '.js');
 		document.getElementsByTagName('head')[0].appendChild(script);
@@ -71,14 +78,21 @@ function create_interface(){
 		var bits = fuse_defs[fuse]["bits"];
 		var mul = 1;
 		var defVal = 0;
-		for (var i in bits) {
-			iniArr["main"][dudefuse].push(bits[i].name);
-			if (bits[i].default_value == "1") {
-				defVal += mul;
-			}
-			mul *= 2;
-		}
-		iniArr["default"][dudefuse] = defVal;
+        // alert($.isArray(bits));
+        for (var i = 0; i < 8; i++) {
+            // alert(typeof bits[i]);
+            if (typeof bits[i] === 'undefined') {
+                iniArr["main"][dudefuse].push("");
+            } else {
+                iniArr["main"][dudefuse].push(bits[i].name);
+                if (bits[i].default_value == "1") {
+                    defVal += mul;
+                }
+            }
+            mul *= 2;
+        }
+
+		iniArr["default"][dudefuse] = "0x" + defVal.toString(16);
 		var options = fuse_defs[fuse]["options"];
 		for (var i in options) {
 			var optionName = dudefuse+"_"+i;
@@ -89,11 +103,11 @@ function create_interface(){
 			if (option.length > 1) {
 				iniArr[optionName]["select"] = 1;
 				for (j in option) {
-					iniArr[optionName]["mask"] = option[j].mask;
+					iniArr[optionName]["mask"] = "0x" + option[j].mask.toString(16);
 					iniArr[optionName]["v"+option[j].value] = option[j].text;
 				}
 			} else {
-				iniArr[optionName]["mask"] = option[0].mask;
+				iniArr[optionName]["mask"] = "0x" + option[0].mask.toString(16);
 				iniArr[optionName]["desc"] = option[0].text;
 			}
 		}
