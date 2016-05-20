@@ -33,13 +33,15 @@ global $device = ""
 global $hex = ""
 global $eep = ""
 
-global $programmers = ObjCreate("Scripting.Dictionary")
-global $devices = ObjCreate("Scripting.Dictionary")
+global $programmers = Dict()
+global $devices = Dict()
 
-global $fuseBytes = ObjCreate("Scripting.Dictionary")
-global $fuseOptions = ObjCreate("Scripting.Dictionary")
-global $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
-global $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
+global $fuseBytes = Dict()
+global $fuseOptions = Dict()
+global $fuseOptionsValues = Dict()
+global $fuseInfoCtrls = Dict()
+
+global $storeControls = Dict()
 
 for $i = 1 to $CmdLine[0]
     switch (StringLeft($CmdLine[$i], 2))
@@ -157,7 +159,7 @@ endfunc
 ; ------------------- inherit hw descriptions ---------------------
 
 func DescInhetit(ByRef $Arr, $len = 20)
-    local $arrById = ObjCreate("Scripting.Dictionary")
+    local $arrById = Dict()
     local $i
     local $id
     local $d
@@ -238,7 +240,7 @@ func BytesGUIToFuses()
 endfunc
 
 func BitsGUIToFuses()
-    $fuseValues = ObjCreate("Scripting.Dictionary")
+    $fuseValues = Dict()
     for $byteName in $fuseBytes
         $fuseVal = 0
         $bits = $fuseBytes($byteName)("bits")
@@ -253,7 +255,7 @@ func BitsGUIToFuses()
 endfunc
 
 func OptionsGUIToFuses()
-    $fuseValues = ObjCreate("Scripting.Dictionary")
+    $fuseValues = Dict()
     for $byteName in $fuseBytes
         $fuseValues($byteName) = 0xFF
     next
@@ -297,25 +299,25 @@ func ReadFusesConf()
         GUICtrlDelete($fuseInfoCtrls($i))
     next
     
-    $fuseBytes = ObjCreate("Scripting.Dictionary")
-    $fuseOptions = ObjCreate("Scripting.Dictionary")
-    $fuseOptionsValues = ObjCreate("Scripting.Dictionary")
-    $fuseInfoCtrls = ObjCreate("Scripting.Dictionary")
+    $fuseBytes = Dict()
+    $fuseOptions = Dict()
+    $fuseOptionsValues = Dict()
+    $fuseInfoCtrls = Dict()
     if (FileExists($ini)) then
         $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
         
         for $i = 0 to UBound($fuseBytesList)-1
             $fuseByteName = $fuseBytesList[$i]
-            $fuseByte = ObjCreate("Scripting.Dictionary")
+            $fuseByte = Dict()
             $fuseByte("value") = Int(IniRead($ini, "default", $fuseByteName, 255))
             
-            $bits = ObjCreate("Scripting.Dictionary")
+            $bits = Dict()
             $fuseBitsList = IniRead($ini, "main", $fuseByteName, "")
             if ($fuseBitsList <> "") then
                 $fuseBitsList = StringSplit($fuseBitsList, ":", $STR_NOCOUNT)
                 for $j = 0 to UBound($fuseBitsList)-1
                     if $fuseBitsList[$j] <> "" then
-                        $fuseBit = ObjCreate("Scripting.Dictionary")
+                        $fuseBit = Dict()
                         $fuseBit("name") = $fuseBitsList[$j]
                         $bits($j) = $fuseBit
                     endif
@@ -333,7 +335,7 @@ func ReadFusesConf()
             for $i = 0 to UBound($fuseOptionsList)-1
                 $fuseOptionName = $fuseOptionsList[$i]
                 
-                $fuseOption = ObjCreate("Scripting.Dictionary")
+                $fuseOption = Dict()
                 $fuseOption("fuse") = IniRead($ini, $fuseOptionName, "fuse", "")
                 $fuseOption("mask") = Int(IniRead($ini, $fuseOptionName, "mask", 0))
                 $fuseOption("desc") = IniRead($ini, $fuseOptionName, "desc", $fuseOptionName)
@@ -341,7 +343,7 @@ func ReadFusesConf()
                 $fuseOption("select") = $select
                 if $select <> 0 then
                     $valuesSection = IniReadSection($ini, $fuseOptionName)
-                    $valuesList = ObjCreate("Scripting.Dictionary")
+                    $valuesList = Dict()
                     for $j = 1 to $valuesSection[0][0]
                         if (StringLeft($valuesSection[$j][0], 1) = "v") then
                             $value = Int(StringTrimLeft($valuesSection[$j][0], 1))
@@ -446,6 +448,10 @@ func InitGUI()
     Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posH + $posButtonX * 2, $posTop + $posV * 3, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
     GUICtrlSetOnEvent(-1, "WriteFuses")
+    
+    Global $abortDudeButton = GUICtrlCreateButton("Abort", $posLeft + $posH * 2 + $posButtonX * 3, $posTop + $posV * 3, $posButtonX, $posY)
+    GUICtrlSetState(-1, $GUI_DISABLE)
+    GUICtrlSetOnEvent(-1, "AbortProcess")
 
     Global $logCtrl = GUICtrlCreateEdit("", $posLeft, 630, 660, 200);
     GUICtrlSetFont(-1, 8, 0, 0, "Consolas")
@@ -462,33 +468,81 @@ endfunc
 
 ; ========== WORK WITH AVRDUDE =================================================
 
+func DisableControls()
+    $storeControls($progCtrl) = GUICtrlGetState($progCtrl)
+    $storeControls($devCtrl) = GUICtrlGetState($devCtrl)
+    $storeControls($readFusesButton) = GUICtrlGetState($readFusesButton)
+    $storeControls($writeFusesButton) = GUICtrlGetState($writeFusesButton)
+    for $byteName in $fuseBytes
+        $byte = $fuseBytes($byteName)
+        $storeControls($byte("ctrl")) = GUICtrlGetState($byte("ctrl"))
+        for $bitN in $byte("bits")
+            $bit = $byte("bits")($bitN)
+            $storeControls($bit("ctrl")) = GUICtrlGetState($bit("ctrl"))
+        next
+    next
+    for $optionName in $fuseOptions
+        $option = $fuseOptions($optionName)
+        $storeControls($option("ctrl")) = GUICtrlGetState($option("ctrl"))
+    next
+    
+    for $ctrl in $storeControls
+        GUICtrlSetState($ctrl, $GUI_DISABLE)
+    next
+    
+    GUICtrlSetState($abortDudeButton, $GUI_ENABLE)
+    
+endfunc
+
+func RestoreControls()
+    for $ctrl in $storeControls
+        GUICtrlSetState($ctrl, $storeControls($ctrl))
+    next
+    $storeControls = Dict()
+    
+    GUICtrlSetState($abortDudeButton, $GUI_DISABLE)
+endfunc
+
+func AbortProcess()
+    ProcessClose ($avrdudePID)
+endfunc
+
 func DudeCmd()
-    return StringFormat('"%s\avrdude.exe" -c %s -p %s ', @ScriptDir, $programmer, $device)
+    return StringFormat('"%s\avrdude.exe" -c %s -p %s -P com5 ', @ScriptDir, $programmer, $device)
 endfunc
 
 func RunDude($arg)
     GUICtrlSetData($logCtrl, "")
-
-    $pid = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD + $STDIN_CHILD)
+    
+    DisableControls()
+    $avrdudePID = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD + $STDIN_CHILD)
     
     $log = ""
     $data = ""
-    while ProcessExists($pid)
+    while ProcessExists($avrdudePID)
         do
-            $logAdd = StderrRead($pid)
+            Sleep(20)
+            $logAdd = StderrRead($avrdudePID)
             if $logAdd <> "" then
                 $log &= $logAdd
                 GUICtrlSetData($logCtrl, $logAdd, 1)
+                if StringInStr($log, "Expected signature for") > 0 then
+                    MsgBox($MB_ICONERROR, "Error", "Incorrect microcontroller")
+                    return ""
+                endif
             endif
-            $data &= StdoutRead($pid)
+            $data &= StdoutRead($avrdudePID)
         until Not @extended Or @error
     wend
+    
+    RestoreControls()
+    
     
     return $data
 endfunc
 
 func ReadFuses()
-    GUICtrlSetData($infoCtrl, "")
+    ; GUICtrlSetData($infoCtrl, "")
     
     $arg = StringFormat(" -c %s -p %s", $programmer, $device)
     $n = 0
@@ -512,7 +566,7 @@ func ReadFuses()
 endfunc
 
 func WriteFuses()
-    GUICtrlSetData($infoCtrl, "")
+    ; GUICtrlSetData($infoCtrl, "")
 
     $arg = StringFormat(" -c %s -p %s", $programmer, $device)
 
@@ -520,7 +574,7 @@ func WriteFuses()
         $arg &= StringFormat(" -U %s:w:%s:m", $fuseByteName, "0x" & Hex($fuseBytes($fuseByteName)("value"), 2))
     next
     
-    GUICtrlSetData($infoCtrl, RunDude($arg), 1);
+    ; GUICtrlSetData($infoCtrl, RunDude($arg), 1);
     
 endfunc
 ; ========= CONFIGS ======================================
@@ -584,5 +638,11 @@ endfunc
 func FuseOptionMod()
     OptionsGUIToFuses()
     FusesToGUI()
+endfunc
+
+; ================ Tools ======================
+
+func Dict()
+    return ObjCreate("Scripting.Dictionary")
 endfunc
 
