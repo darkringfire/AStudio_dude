@@ -9,9 +9,8 @@
 const $posLeft = 10
 const $posTop = 10
 const $posY = 20
-const $posH = 5
-const $posV = 25
-const $posVs = 18
+const $posSpaceX = 5
+const $posStepY = 25
 
 const $posButtonX = 50
 const $posProgX = 400
@@ -20,8 +19,13 @@ const $posPathLeft = 30
 const $posPathX = 555
 
 const $posFuseStepX = 100
-const $posFuseTop = $posTop + $posV * 4
+const $posFuseTop = 140
 
+const $posBitsTop = 200
+const $posBitsStepY = 18
+
+const $posOptTop = 370
+const $posOptV = 21
 const $posOptionX = 650
 
 
@@ -36,12 +40,19 @@ global $eep = ""
 global $programmers = Dict()
 global $devices = Dict()
 
+global $dudeOptions - Dict()
+
 global $fuseBytes = Dict()
 global $fuseOptions = Dict()
 global $fuseOptionsValues = Dict()
 global $fuseInfoCtrls = Dict()
 
 global $storeControls = Dict()
+
+global $avrdudePID
+global $lastClick = 0
+
+$dudeOptions("B") = Dict()
 
 for $i = 1 to $CmdLine[0]
     switch (StringLeft($CmdLine[$i], 2))
@@ -83,7 +94,14 @@ DeviceApply()
 
 
 While (1)
-  Sleep(1000)
+    Sleep(10)
+    switch $lastClick
+        case $readFusesButton
+            ReadFuses()
+        case $writeFusesButton
+            WriteFuses()
+    endswitch
+    $lastClick = 0
 WEnd 
 
 ;=======================================================================
@@ -367,23 +385,23 @@ endfunc
 func FuseGUI()
     GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
     
-    $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posTop + 3 + $posV * 5, 60, 20)
+    $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posFuseTop + $posStepY * 2 + 3, 60, $posY)
     GUICtrlSetColor(-1, 0x880000)
     GUICtrlSetFont(-1, 9, $FW_BOLD)
-    $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0", $posLeft + 65, $posTop + $posV * 5, 40, 20)
+    $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0", $posLeft + 65, $posFuseTop + $posStepY * 2, 40, $posY)
     GUICtrlSetState(-1, $GUI_CHECKED + $GUI_DISABLE)
-    $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1", $posLeft + 105, $posTop + $posV * 5, 40, 20)
+    $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1", $posLeft + 105, $posFuseTop + $posStepY * 2, 40, $posY)
     GUICtrlSetState(-1, $GUI_UNCHECKED + $GUI_DISABLE)
 
     $byteN = 0
     for $fuseByteName in $fuseBytes
         $bits = $fuseBytes($fuseByteName)("bits")
-        $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $byteN, $posFuseTop + 5, 40, 20)
-        $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $byteN + 30, $posFuseTop, 40, 20)
+        $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $byteN, $posFuseTop + $posStepY + 3, 40, $posY)
+        $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $byteN + 30, $posFuseTop + $posStepY, 40, $posY)
         GUICtrlSetOnEvent(-1, "FuseByteMod")
         
         for $bitN in $bits
-            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bits($bitN)("name"), $posLeft + $posFuseStepX * $byteN, $posFuseTop + 30 + 18 * (8-$bitN), $posFuseStepX - 10, 20)
+            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bits($bitN)("name"), $posLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (8-$bitN), $posFuseStepX - 10, $posY)
             GUICtrlSetOnEvent(-1, "FuseBitMod")
         next
         $fuseBytes($fuseByteName)("bits") = $bits
@@ -396,10 +414,10 @@ func FuseGUI()
         $fuseOption = $fuseOptions($optionName)
         
         if $fuseOption("select") = 0 then
-            $fuseOption("ctrl") = GUICtrlCreateCheckbox($fuseOption("desc"), $posLeft, $posFuseTop + 200 + 21 * $optN, $posOptionX, 20)
+            $fuseOption("ctrl") = GUICtrlCreateCheckbox($fuseOption("desc"), $posLeft, $posOptTop + 1 + $posOptV * $optN, $posOptionX, $posY)
             GUICtrlSetOnEvent(-1, "FuseOptionMod")
         else
-            $fuseOption("ctrl") = GUICtrlCreateCombo("", $posLeft, $posFuseTop + 199 + 21 * $optN, $posOptionX, 20, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+            $fuseOption("ctrl") = GUICtrlCreateCombo("", $posLeft, $posOptTop + $posOptV * $optN, $posOptionX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
             GUICtrlSetOnEvent(-1, "FuseOptionMod")
             for $val in $fuseOption("list")
                 GUICtrlSetData(-1, $fuseOption("list")($val))
@@ -426,30 +444,32 @@ func InitGUI()
     next
     GUICtrlSetOnEvent(-1, "ProgrammerApply")
 
-    Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posH, $posTop, $posDevX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
+    Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posSpaceX, $posTop, $posDevX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
     for $id in $devices
         $item = StringFormat("%s [%s]", $devices($id), $id)
         GUICtrlSetData(-1, $item, $id = $device ? $item : 0)
     next
     GUICtrlSetOnEvent(-1, "DeviceApply")
     
-    ; Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posH * 2, $posTop, $posButtonX, $posY)
+    ; Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posSpaceX * 2, $posTop, $posButtonX, $posY)
     ; GUICtrlSetOnEvent(-1, "HardwareApply")
     
-    Global $hexCtrl = GUICtrlCreateInput($hex, $posLeft + $posButtonX, $posTop + $posV, $posPathX, $posY)
-    GUICtrlCreateLabel("HEX:", $posLeft, $posTop + $posV + 3, $posButtonX, $posY)
-    Global $eepCtrl = GUICtrlCreateInput($eep, $posLeft + $posButtonX, $posTop + $posV * 2, $posPathX, $posY)
-    GUICtrlCreateLabel("EEP:", $posLeft, $posTop + $posV * 2 + 3, $posButtonX, $posY)
-
-    GUICtrlCreateLabel("Fuses:", $posLeft, $posTop + $posV * 3 + 3, $posButtonX, $posY)
-    Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posTop + $posV * 3, $posButtonX, $posY)
-    GUICtrlSetOnEvent(-1, "ReadFuses")
-
-    Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posH + $posButtonX * 2, $posTop + $posV * 3, $posButtonX, $posY)
-    GUICtrlSetState(-1, $GUI_DISABLE)
-    GUICtrlSetOnEvent(-1, "WriteFuses")
     
-    Global $abortDudeButton = GUICtrlCreateButton("Abort", $posLeft + $posH * 2 + $posButtonX * 3, $posTop + $posV * 3, $posButtonX, $posY)
+    
+    Global $hexCtrl = GUICtrlCreateInput($hex, $posLeft + $posButtonX, $posTop + $posStepY * 2, $posPathX, $posY)
+    GUICtrlCreateLabel("HEX:", $posLeft, $posTop + $posStepY * 2 + 3, $posButtonX, $posY)
+    Global $eepCtrl = GUICtrlCreateInput($eep, $posLeft + $posButtonX, $posTop + $posStepY * 3, $posPathX, $posY)
+    GUICtrlCreateLabel("EEP:", $posLeft, $posTop + $posStepY * 3 + 3, $posButtonX, $posY)
+
+    GUICtrlCreateLabel("Fuses:", $posLeft, $posFuseTop + 3, $posButtonX, $posY)
+    Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posFuseTop, $posButtonX, $posY)
+    GUICtrlSetOnEvent(-1, "RWClick")
+
+    Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posSpaceX + $posButtonX * 2, $posFuseTop, $posButtonX, $posY)
+    GUICtrlSetState(-1, $GUI_DISABLE)
+    GUICtrlSetOnEvent(-1, "RWClick")
+    
+    Global $abortDudeButton = GUICtrlCreateButton("Abort", $posLeft + $posSpaceX * 2 + $posButtonX * 3, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
     GUICtrlSetOnEvent(-1, "AbortProcess")
 
@@ -467,6 +487,10 @@ func InitGUI()
 endfunc
 
 ; ========== WORK WITH AVRDUDE =================================================
+
+func RWClick()
+    $lastClick = @GUI_CtrlId
+endfunc
 
 func DisableControls()
     $storeControls($progCtrl) = GUICtrlGetState($progCtrl)
@@ -521,7 +545,6 @@ func RunDude($arg)
     $data = ""
     while ProcessExists($avrdudePID)
         do
-            Sleep(20)
             $logAdd = StderrRead($avrdudePID)
             if $logAdd <> "" then
                 $log &= $logAdd
