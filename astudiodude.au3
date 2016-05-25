@@ -586,8 +586,16 @@ func RunDude($arg)
                 $log &= $logAdd
                 GUICtrlSetData($logCtrl, $logAdd, 1)
                 if StringInStr($log, "Expected signature for") > 0 then
-                    MsgBox($MB_ICONERROR, "Error", "Incorrect microcontroller")
-                    return ""
+                    $match = StringRegExp($log, "Device signature = 0x\w+ \(probably (\w+)\)", $STR_REGEXPARRAYMATCH)
+                    if @error = 0 and $devices.Exists($match[0]) then
+                        if MsgBox($MB_ICONWARNING + $MB_YESNO, "Incorrect microcontroller", StringFormat('Incorrect microcontroller "%s".\nChange to "%s"?', $device, $match[0])) = $IDYES then
+                            $item = StringFormat("%s [%s]", $devices($match[0]), $match[0])
+                            GUICtrlSetData($devCtrl, $item, $item)
+                            DeviceApply()
+                        endif
+                    endif
+                    ExitLoop
+                    $data = ""
                 endif
             endif
             $data &= StdoutRead($avrdudePID)
