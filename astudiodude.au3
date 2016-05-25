@@ -32,8 +32,8 @@ const $posOptionX = 650
 
 global $conf = "\avrdude.ini"
 
-global $programmer = ""
-global $device = ""
+global $programmer = "usbasp"
+global $device = "m328p"
 
 global $hex = ""
 global $eep = ""
@@ -59,7 +59,7 @@ $dudeOptions("P") = $opt
 
 $opt = Dict()
 $opt("desc") = "Bitclock"
-$opt("list") = StringSplit(" |4kHz|32kHz|125kHz|250kHz|1MHz", "|")
+$opt("list") = StringSplit("4kHz|32kHz|125kHz|250kHz|1MHz", "|")
 $dudeOptions("B") = $opt
 
 
@@ -451,7 +451,7 @@ func InitGUI()
         $item = StringFormat("%s [%s]", $programmers($id), $id)
         GUICtrlSetData(-1, $item, $id = $programmer ? $item : 0)
     next
-    GUICtrlSetOnEvent(-1, "ProgrammerApply")
+    ; GUICtrlSetOnEvent(-1, "ProgrammerApply")
 
     Global $devCtrl = GUICtrlCreateCombo("", $posLeft + $posProgX + $posSpaceX, $posTop, $posDevX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
     for $id in $devices
@@ -463,13 +463,18 @@ func InitGUI()
     $optN = 0
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
+        $value = $opt("value")
         select
             case $opt.Exists("list")
                 GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
-                $opt("ctrl") = GUICtrlCreateCombo("", $posLeft + 110 * $optN + 40, 35, 60, $posY)
+                $opt("ctrl") = GUICtrlCreateCombo(" ", $posLeft + 110 * $optN + 40, 35, 60, $posY)
                 for $i = 1 to $opt("list")[0]
-                    GUICtrlSetData($opt("ctrl"), $opt("list")[$i], $i = 1 ? $opt("list")[$i] : "")
+                    GUICtrlSetData(-1, $opt("list")[$i])
                 next
+                if $value = "" then
+                    $value = " "
+                endif
+                GUICtrlSetData(-1, $value, $value)
             case else
                 GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
                 $opt("ctrl") = GUICtrlCreateInput("", $posLeft + 110 * $optN + 40, 35, 60, $posY)
@@ -559,10 +564,11 @@ func AbortProcess()
 endfunc
 
 func DudeCmd()
+    ProgrammerApply()
     $cmd = StringFormat('"%s\avrdude.exe" -c %s -p %s', @ScriptDir, $programmer, $device)
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
-        $value = StringStripWS(GUICtrlRead($opt("ctrl")), $STR_STRIPALL)
+        $value = $opt("value")
         if $value <> "" then
             $cmd &= StringFormat(" -%s %s", $optName, $value)
         endif
@@ -647,10 +653,14 @@ endfunc
 ; ========= CONFIGS ======================================
 
 func LoadProjectConf()
-    $programmer = IniRead($conf, "conf", "programmer", "")
-    $device = IniRead($conf, "conf", "device", "")
+    $programmer = IniRead($conf, "conf", "programmer", $programmer)
+    $device = IniRead($conf, "conf", "device", $device)
     $hex = IniRead($conf, "conf", "hex", "")
     $eep = IniRead($conf, "conf", "eep", "")
+    for $optName in $dudeOptions
+        $opt = $dudeOptions($optName)
+        $opt("value") = StringStripWS(IniRead($conf, "conf", $optName, ""), $STR_STRIPALL)
+    next
 endfunc
 
 func SaveProjectConf()
@@ -658,6 +668,10 @@ func SaveProjectConf()
     IniWrite($conf, "conf", "device", $device)
     IniWrite($conf, "conf", "hex", $hex)
     IniWrite($conf, "conf", "eep", $eep)
+    for $optName in $dudeOptions
+        $opt = $dudeOptions($optName)
+        IniWrite($conf, "conf", $optName, $opt("value"))
+    next
 endfunc
 
 ; ================= CURRENT SETTINGS ====================================
@@ -673,6 +687,10 @@ endfunc
 
 func ProgrammerApply()
     $programmer = ExtractHardwareId(GUICtrlRead($progCtrl))
+    for $optName in $dudeOptions
+        $opt = $dudeOptions($optName)
+        $opt("value") = StringStripWS(GUICtrlRead($opt("ctrl")), $STR_STRIPALL)
+    next
 endfunc
 
 func DeviceApply()
@@ -686,7 +704,7 @@ endfunc
 
 Func CLOSEClicked() 
     If @GUI_WinHandle = $mainwindow Then 
-        ; HardwareApply()
+        ProgrammerApply()
         SaveProjectConf()
         Exit 
     EndIf 
