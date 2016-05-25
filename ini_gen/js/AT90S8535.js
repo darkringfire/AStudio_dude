@@ -1,1 +1,0 @@
-fuse_defs = {"LOW":{"bits":{"1":{"name":"SPIEN","text":"Serial Program Downloading Enabled","default_value":1},"2":{"name":"FSTRT","text":"Short Start-up time selected","default_value":1}},"options":{"0x20":[{"mask":32,"value":0,"text":"Serial program downloading (SPI) enabled"}],"0x01":[{"mask":1,"value":0,"text":"Short start-up time enabled"}]}}};create_interface();
