@@ -397,9 +397,9 @@ func FuseGUI()
     $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posLeft, $posFuseTop + $posStepY * 2 + 3, 60, $posY)
     GUICtrlSetColor(-1, 0x880000)
     GUICtrlSetFont(-1, 9, $FW_BOLD)
-    $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0", $posLeft + 65, $posFuseTop + $posStepY * 2, 40, $posY)
+    $fuseInfoCtrls("c1") = GUICtrlCreateCheckbox("=0 (Enable)", $posLeft + 65, $posFuseTop + $posStepY * 2, 80, $posY)
     GUICtrlSetState(-1, $GUI_CHECKED + $GUI_DISABLE)
-    $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1", $posLeft + 105, $posFuseTop + $posStepY * 2, 40, $posY)
+    $fuseInfoCtrls("c2") = GUICtrlCreateCheckbox("=1 (Disable)", $posLeft + 145, $posFuseTop + $posStepY * 2, 80, $posY)
     GUICtrlSetState(-1, $GUI_UNCHECKED + $GUI_DISABLE)
 
     $byteN = 0
@@ -410,7 +410,12 @@ func FuseGUI()
         GUICtrlSetOnEvent(-1, "FuseByteMod")
         
         for $bitN in $bits
-            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bits($bitN)("name"), $posLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (8-$bitN), $posFuseStepX - 10, $posY)
+            $bitName = $bits($bitN)("name")
+            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bitName, $posLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (8-$bitN), $posFuseStepX - 10, $posY)
+            if StringRegExp($bitName, "RSTDISBL|SPIEN|CKSEL", $STR_REGEXPMATCH) then
+                GUICtrlSetColor(-1, 0x880000)
+                GUICtrlSetFont(-1, 9, $FW_BOLD)
+            endif
             GUICtrlSetOnEvent(-1, "FuseBitMod")
         next
         ;$fuseBytes($fuseByteName)("bits") = $bits
@@ -442,6 +447,7 @@ endfunc
 
 func InitGUI()
     Opt("GUIOnEventMode", 1)
+    DllCall("uxtheme.dll", "none", "SetThemeAppProperties", "int", 0)
     
     Global $mainWindow = GUICreate("Main", 700, 900) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
