@@ -5,6 +5,7 @@
 #include <StringConstants.au3>
 #include <ComboConstants.au3>
 #include <FontConstants.au3>
+#include <StaticConstants.au3>
 
 const $posLeft = 10
 const $posTop = 10
@@ -40,7 +41,7 @@ global $eep = ""
 global $programmers = Dict()
 global $devices = Dict()
 
-global $dudeOptions - Dict()
+global $dudeOptions = Dict()
 
 global $fuseBytes = Dict()
 global $fuseOptions = Dict()
@@ -52,7 +53,15 @@ global $storeControls = Dict()
 global $avrdudePID
 global $lastClick = 0
 
-$dudeOptions("B") = Dict()
+$opt = Dict()
+$opt("desc") = "Port"
+$dudeOptions("P") = $opt
+
+$opt = Dict()
+$opt("desc") = "Bitclock"
+$opt("list") = StringSplit(" |4kHz|32kHz|125kHz|250kHz|1MHz", "|")
+$dudeOptions("B") = $opt
+
 
 for $i = 1 to $CmdLine[0]
     switch (StringLeft($CmdLine[$i], 2))
@@ -404,7 +413,7 @@ func FuseGUI()
             $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bits($bitN)("name"), $posLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (8-$bitN), $posFuseStepX - 10, $posY)
             GUICtrlSetOnEvent(-1, "FuseBitMod")
         next
-        $fuseBytes($fuseByteName)("bits") = $bits
+        ;$fuseBytes($fuseByteName)("bits") = $bits
 
         $byteN += 1
     next
@@ -424,7 +433,7 @@ func FuseGUI()
             next
         endif
         
-        $fuseOptions($optionName) = $fuseOption
+        ;$fuseOptions($optionName) = $fuseOption
         $optN +=1
     next
 endfunc
@@ -451,6 +460,23 @@ func InitGUI()
     next
     GUICtrlSetOnEvent(-1, "DeviceApply")
     
+    $optN = 0
+    for $optName in $dudeOptions
+        $opt = $dudeOptions($optName)
+        select
+            case $opt.Exists("list")
+                GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
+                $opt("ctrl") = GUICtrlCreateCombo("", $posLeft + 110 * $optN + 40, 35, 60, $posY)
+                for $i = 1 to $opt("list")[0]
+                    GUICtrlSetData($opt("ctrl"), $opt("list")[$i], $i = 1 ? $opt("list")[$i] : "")
+                next
+            case else
+                GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
+                $opt("ctrl") = GUICtrlCreateInput("", $posLeft + 110 * $optN + 40, 35, 60, $posY)
+        endselect
+        $optN += 1
+    next
+    
     ; Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posSpaceX * 2, $posTop, $posButtonX, $posY)
     ; GUICtrlSetOnEvent(-1, "HardwareApply")
     
@@ -462,6 +488,7 @@ func InitGUI()
     GUICtrlCreateLabel("EEP:", $posLeft, $posTop + $posStepY * 3 + 3, $posButtonX, $posY)
 
     GUICtrlCreateLabel("Fuses:", $posLeft, $posFuseTop + 3, $posButtonX, $posY)
+    
     Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetOnEvent(-1, "RWClick")
 
@@ -532,14 +559,23 @@ func AbortProcess()
 endfunc
 
 func DudeCmd()
-    return StringFormat('"%s\avrdude.exe" -c %s -p %s -P com5 ', @ScriptDir, $programmer, $device)
+    $cmd = StringFormat('"%s\avrdude.exe" -c %s -p %s', @ScriptDir, $programmer, $device)
+    for $optName in $dudeOptions
+        $opt = $dudeOptions($optName)
+        $value = StringStripWS(GUICtrlRead($opt("ctrl")), $STR_STRIPALL)
+        if $value <> "" then
+            $cmd &= StringFormat(" -%s %s", $optName, $value)
+        endif
+    next
+    return $cmd
 endfunc
 
 func RunDude($arg)
     GUICtrlSetData($logCtrl, "")
     
+    $cmd = DudeCmd() & $arg
     DisableControls()
-    $avrdudePID = Run(DudeCmd() & $arg, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD + $STDIN_CHILD)
+    $avrdudePID = Run($cmd, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD + $STDIN_CHILD)
     
     $log = ""
     $data = ""
@@ -567,7 +603,7 @@ endfunc
 func ReadFuses()
     ; GUICtrlSetData($infoCtrl, "")
     
-    $arg = StringFormat(" -c %s -p %s", $programmer, $device)
+    $arg = ""
     $n = 0
     for $fuseByteName in $fuseBytes
         $n += 1
@@ -591,13 +627,13 @@ endfunc
 func WriteFuses()
     ; GUICtrlSetData($infoCtrl, "")
 
-    $arg = StringFormat(" -c %s -p %s", $programmer, $device)
+    $arg = ""
 
     for $fuseByteName in $fuseBytes
         $arg &= StringFormat(" -U %s:w:%s:m", $fuseByteName, "0x" & Hex($fuseBytes($fuseByteName)("value"), 2))
     next
     
-    ; GUICtrlSetData($infoCtrl, RunDude($arg), 1);
+    RunDude($arg)
     
 endfunc
 ; ========= CONFIGS ======================================
