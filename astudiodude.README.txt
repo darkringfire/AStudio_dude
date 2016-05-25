@@ -1,0 +1,10 @@
+
+astudiodude.exe [-p<prodect_dir>] [-t<target_name>]
+    -p      Project directory
+    -t      Target full path w/o extension
+
+Atmel Studio external tools:
+
+Title:              AstudioDude
+Command:            <path>\astudiodude.exe
+Arguments:          -p$(ProjectDir) -t$(TargetDir)$(TargetName)
