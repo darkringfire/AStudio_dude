@@ -1,3 +1,7 @@
+#NoTrayIcon
+#pragma compile(Icon, "fire-multi-size.ico")
+#pragma compile(Out, "..\astudiodude.exe")
+
 #include <Array.au3>
 #include <GUIConstantsEx.au3> 
 #include <WindowsConstants.au3>
@@ -12,7 +16,7 @@ const $posTop = 10
 const $posY = 20
 const $posSpaceX = 5
 const $posStepY = 25
-const $posButtonX = 50
+const $posButtonX = 55
 
 const $posProgX = 450
 const $posDevX = 200
@@ -20,7 +24,7 @@ const $posDevX = 200
 const $posMainX = $posProgX + $posDevX + $posLeft * 2 + $posSpaceX
 
 const $posPathLeft = $posLeft + $posButtonX
-const $posPathX = $posMainX - $posPathLeft - $posLeft
+const $posPathX = $posMainX - $posPathLeft - $posButtonX - $posSpaceX - $posLeft
 
 const $posFuseStepX = 100
 const $posFuseTop = $posTop + $posStepY * 4
@@ -49,7 +53,7 @@ global $conf = "\avrdude.ini"
 global $programmer = "usbasp"
 global $device = "m328p"
 
-global $hex = ""
+global $flash = ""
 global $eep = ""
 
 global $programmers = Dict()
@@ -76,6 +80,11 @@ $opt("desc") = "Bitclock"
 $opt("list") = StringSplit("4kHz|32kHz|125kHz|250kHz|1MHz", "|")
 $dudeOptions("B") = $opt
 
+if @Compiled then
+    $dudeDir = @ScriptDir
+else
+    $dudeDir = @ScriptDir & "\.."
+endif
 
 for $i = 1 to $CmdLine[0]
     switch (StringLeft($CmdLine[$i], 2))
@@ -83,6 +92,8 @@ for $i = 1 to $CmdLine[0]
             $project = StringTrimLeft($CmdLine[$i], 2)
         case "-t"
             $target = StringTrimLeft($CmdLine[$i], 2)
+        case "-d"
+            $dudeDir = StringTrimLeft($CmdLine[$i], 2)
         case "-a"
             $auto = StringTrimLeft($CmdLine[$i], 2)
     endswitch
@@ -97,7 +108,7 @@ endif
 LoadProjectConf()
 
 if IsDeclared("target") then
-    $hex = $target & ".hex"
+    $flash = $target & ".hex"
     $eep = $target & ".eep"
 endif
 
@@ -123,6 +134,10 @@ While (1)
             ReadFuses()
         case $writeFusesButton
             WriteFuses()
+        case $flashButton
+            BurnFlash()
+        case $eepButton
+            BurnEEPROM()
     endswitch
     $lastClick = 0
 WEnd 
@@ -136,7 +151,7 @@ func ReadDudeConf()
     Local $progArr[0][3]
     Local $devArr[0][3]
     
-    $dudeConf = @ScriptDir & "\avrdude.conf"
+    $dudeConf = $dudeDir & "\avrdude.conf"
     $dudeConfFile = FileOpen($dudeConf)
     if ($dudeConfFile <> 0) then
         $type = ""
@@ -321,7 +336,7 @@ endfunc
 
 func ReadFusesConf()
     
-    $ini = StringFormat("%s\fuses\%s.ini", @ScriptDir, $device)
+    $ini = StringFormat("%s\fuses\%s.ini", $dudeDir, $device)
     $arg = ""
     
     
@@ -484,7 +499,7 @@ func InitGUI()
     Opt("GUIOnEventMode", 1)
     DllCall("uxtheme.dll", "none", "SetThemeAppProperties", "int", 0)
     
-    Global $mainWindow = GUICreate("Main", $posMainX, $posMainY) 
+    Global $mainWindow = GUICreate("AStudioDude", $posMainX, $posMainY) 
     GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
     
     Global $progCtrl = GUICtrlCreateCombo("", $posLeft, $posTop, $posProgX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
@@ -528,19 +543,23 @@ func InitGUI()
     
     
     
-    GUICtrlCreateLabel("HEX:", $posLeft, $posTop + $posStepY * 2 + 3, $posButtonX, $posY)
-    Global $hexCtrl = GUICtrlCreateInput($hex, $posLeft + $posButtonX, $posTop + $posStepY * 2, $posPathX, $posY)
-    GUICtrlCreateLabel("EEP:", $posLeft, $posTop + $posStepY * 3 + 3, $posButtonX, $posY)
+    GUICtrlCreateLabel("Flash:", $posLeft, $posTop + $posStepY * 2 + 3, $posButtonX, $posY)
+    Global $flashCtrl = GUICtrlCreateInput($flash, $posLeft + $posButtonX, $posTop + $posStepY * 2, $posPathX, $posY)
+    global $flashButton = GUICtrlCreateButton("Flash!", $posMainX - $posLeft - $posButtonX, $posTop + $posStepY * 2, $posButtonX, $posY)
+    GUICtrlSetOnEvent(-1, "BurnClick")
+    GUICtrlCreateLabel("EEPROM:", $posLeft, $posTop + $posStepY * 3 + 3, $posButtonX, $posY)
     Global $eepCtrl = GUICtrlCreateInput($eep, $posLeft + $posButtonX, $posTop + $posStepY * 3, $posPathX, $posY)
+    global $eepButton = GUICtrlCreateButton("EEPROM!", $posMainX - $posLeft - $posButtonX, $posTop + $posStepY * 3, $posButtonX, $posY)
+    GUICtrlSetOnEvent(-1, "BurnClick")
 
     GUICtrlCreateLabel("Fuses:", $posLeft, $posFuseTop + 3, $posButtonX, $posY)
     
     Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posFuseTop, $posButtonX, $posY)
-    GUICtrlSetOnEvent(-1, "RWClick")
+    GUICtrlSetOnEvent(-1, "BurnClick")
 
     Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posSpaceX + $posButtonX * 2, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
-    GUICtrlSetOnEvent(-1, "RWClick")
+    GUICtrlSetOnEvent(-1, "BurnClick")
     
     Global $abortDudeButton = GUICtrlCreateButton("Abort", $posLeft + $posSpaceX * 2 + $posButtonX * 3, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
@@ -567,7 +586,7 @@ endfunc
 
 ; ========== WORK WITH AVRDUDE =================================================
 
-func RWClick()
+func BurnClick()
     $lastClick = @GUI_CtrlId
 endfunc
 
@@ -576,6 +595,8 @@ func DisableControls()
     $storeControls($devCtrl) = GUICtrlGetState($devCtrl)
     $storeControls($readFusesButton) = GUICtrlGetState($readFusesButton)
     $storeControls($writeFusesButton) = GUICtrlGetState($writeFusesButton)
+    $storeControls($flashButton) = GUICtrlGetState($flashButton)
+    $storeControls($eepButton) = GUICtrlGetState($eepButton)
     for $byteName in $fuseBytes
         $byte = $fuseBytes($byteName)
         $storeControls($byte("ctrl")) = GUICtrlGetState($byte("ctrl"))
@@ -612,7 +633,7 @@ endfunc
 
 func DudeCmd()
     ProgrammerApply()
-    $cmd = StringFormat('"%s\avrdude.exe" -c %s -p %s', @ScriptDir, $programmer, $device)
+    $cmd = StringFormat('"%s\avrdude.exe" -c %s -p %s', $dudeDir, $programmer, $device)
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
         $value = $opt("value")
@@ -697,12 +718,32 @@ func WriteFuses()
     RunDude($arg)
     
 endfunc
+
+func BurnFlash()
+    if FileExists($flash) then
+        $arg = StringFormat(" -U flash:w:%s:i", $flash)
+        RunDude($arg)
+    else
+        MsgBox($MB_ICONERROR, "File not found", StringFormat('File "%s" not found', $flash))
+    endif
+endfunc
+
+func BurnEEPROM()
+    if FileExists($eep) then
+        $arg = StringFormat(" -U eeprom:w:%s:i", $eep)
+        RunDude($arg)
+    else
+        MsgBox($MB_ICONERROR, "File not found", StringFormat('File "%s" not found', $eep))
+    endif
+endfunc
+
+
 ; ========= CONFIGS ======================================
 
 func LoadProjectConf()
     $programmer = IniRead($conf, "conf", "programmer", $programmer)
     $device = IniRead($conf, "conf", "device", $device)
-    $hex = IniRead($conf, "conf", "hex", "")
+    $flash = IniRead($conf, "conf", "hex", "")
     $eep = IniRead($conf, "conf", "eep", "")
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
@@ -713,7 +754,7 @@ endfunc
 func SaveProjectConf()
     IniWrite($conf, "conf", "programmer", $programmer)
     IniWrite($conf, "conf", "device", $device)
-    IniWrite($conf, "conf", "hex", $hex)
+    IniWrite($conf, "conf", "hex", $flash)
     IniWrite($conf, "conf", "eep", $eep)
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
@@ -734,6 +775,8 @@ endfunc
 
 func ProgrammerApply()
     $programmer = ExtractHardwareId(GUICtrlRead($progCtrl))
+    $flash = GUICtrlRead($flashCtrl)
+    $eep = GUICtrlRead($eepCtrl)
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
         $opt("value") = StringStripWS(GUICtrlRead($opt("ctrl")), $STR_STRIPALL)
