@@ -1,10 +1,19 @@
 
-astudiodude.exe [-p<prodect_dir>] [-t<target_name>]
+astudiodude.exe [-p<prodect_dir>] [-t<target_name>] [-a[f][e][c]]
     -p      Project directory
     -t      Target full path w/o extension
+    -a      Automaticaly actions:
+                f - Burn flash
+                e - Burn EEPROM
+                c - Close on complete
 
 Atmel Studio external tools:
 
 Title:              AstudioDude
 Command:            <path>\astudiodude.exe
 Arguments:          -p$(ProjectDir) -t$(TargetDir)$(TargetName)
+
+Title:              AstudioDude : AutoFlash
+Command:            <path>\astudiodude.exe
+Arguments:          -fc -p$(ProjectDir) -t$(TargetDir)$(TargetName)
+

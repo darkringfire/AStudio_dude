@@ -71,6 +71,10 @@ global $storeControls = Dict()
 global $avrdudePID
 global $lastClick = 0
 
+global $autoFlash = 0
+global $autoEEPROM = 0
+global $autoClose = 0
+
 $opt = Dict()
 $opt("desc") = "Port"
 $dudeOptions("P") = $opt
@@ -96,6 +100,15 @@ for $i = 1 to $CmdLine[0]
             $dudeDir = StringTrimLeft($CmdLine[$i], 2)
         case "-a"
             $auto = StringTrimLeft($CmdLine[$i], 2)
+            if StringInStr($auto, "f") > 0 then
+                $autoFlash = 1
+            endif
+            if StringInStr($auto, "e") > 0 then
+                $autoEEPROM = 1
+            endif
+            if StringInStr($auto, "c") > 0 then
+                $autoClose = 1
+            endif
     endswitch
 next
 
@@ -126,7 +139,6 @@ InitGUI()
 ProgrammerApply()
 DeviceApply()
 
-
 While (1)
     Sleep(10)
     switch $lastClick
@@ -139,6 +151,17 @@ While (1)
         case $eepButton
             BurnEEPROM()
     endswitch
+    if $autoFlash = 1 then
+        BurnFlash()
+    endif
+    if $autoEEPROM = 1 then
+        BurnEEPROM()
+    endif
+    if $autoClose = 1 then
+        $autoClose = 0
+        ;MsgBox(0,0,"Autoclose")
+        Exit
+    endif
     $lastClick = 0
 WEnd 
 
@@ -533,7 +556,7 @@ func InitGUI()
                 GUICtrlSetData(-1, $value, $value)
             case else
                 GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
-                $opt("ctrl") = GUICtrlCreateInput("", $posLeft + 110 * $optN + 40, 35, 60, $posY)
+                $opt("ctrl") = GUICtrlCreateInput($opt("value"), $posLeft + 110 * $optN + 40, 35, 60, $posY)
         endselect
         $optN += 1
     next
@@ -628,6 +651,9 @@ func RestoreControls()
 endfunc
 
 func AbortProcess()
+    $autoFlash = 0
+    $autoEEPROM = 0
+    $autoClose = 0
     ProcessClose ($avrdudePID)
 endfunc
 
@@ -653,6 +679,7 @@ func RunDude($arg)
     
     $log = ""
     $data = ""
+    $stop = 0
     while ProcessExists($avrdudePID)
         do
             $logAdd = StderrRead($avrdudePID)
@@ -660,21 +687,49 @@ func RunDude($arg)
                 $log &= $logAdd
                 GUICtrlSetData($logCtrl, $logAdd, 1)
                 if StringInStr($log, "Expected signature for") > 0 then
+                    $stop = 1
                     $match = StringRegExp($log, "Device signature = 0x\w+ \(probably (\w+)\)", $STR_REGEXPARRAYMATCH)
                     if @error = 0 and $devices.Exists($match[0]) then
-                        if MsgBox($MB_ICONWARNING + $MB_YESNO, "Incorrect microcontroller", StringFormat('Incorrect microcontroller "%s".\nChange to "%s"?', $device, $match[0])) = $IDYES then
+                        if MsgBox($MB_ICONWARNING + $MB_YESNO, "Error", StringFormat('Incorrect microcontroller "%s".\nChange to "%s"?', $device, $match[0])) = $IDYES then
                             $item = StringFormat("%s [%s]", $devices($match[0]), $match[0])
                             GUICtrlSetData($devCtrl, $item, $item)
                             DeviceApply()
                         endif
+                    else
+                        MsgBox($MB_ICONERROR, "Error", StringFormat('Incorrect microcontroller "%s"', $device))
                     endif
                     ExitLoop
                     $data = ""
+                endif
+                if StringInStr($log, "target doesn't answer") > 0 then
+                    $stop = 1
+                    MsgBox($MB_ICONERROR, "Error", "Target device doesn't ansewer")
+                endif
+                ;can't open device "\\.\com1"
+                if StringInStr($log, "can't open device") > 0 then
+                    $stop = 1
+                    $match = StringRegExp($log, "can't open device ""([^""]+)""", $STR_REGEXPARRAYMATCH)
+                    if @error = 0 then
+                        MsgBox($MB_ICONERROR, "Error", StringFormat('Can''t open port "%s"', $match[0]))
+                    else
+                        MsgBox($MB_ICONERROR, "Error", "Can't open port")
+                    endif
+                    
+                endif
+                ;could not find USB device
+                if StringInStr($log, "could not find USB device") > 0 then
+                    $stop = 1
+                    MsgBox($MB_ICONERROR, "Error", "Could not find USB programmer")
                 endif
             endif
             $data &= StdoutRead($avrdudePID)
         until Not @extended Or @error
     wend
+    if $stop = 1 then
+        $autoFlash = 0
+        $autoEEPROM = 0
+        $autoClose = 0
+    endif
     
     RestoreControls()
     
@@ -684,7 +739,7 @@ endfunc
 
 func ReadFuses()
     ; GUICtrlSetData($infoCtrl, "")
-    
+
     $arg = ""
     $n = 0
     for $fuseByteName in $fuseBytes
@@ -720,6 +775,7 @@ func WriteFuses()
 endfunc
 
 func BurnFlash()
+    $autoFlash = 0
     if FileExists($flash) then
         $arg = StringFormat(" -U flash:w:%s:i", $flash)
         RunDude($arg)
@@ -729,6 +785,7 @@ func BurnFlash()
 endfunc
 
 func BurnEEPROM()
+    $autoEEPROM = 0
     if FileExists($eep) then
         $arg = StringFormat(" -U eeprom:w:%s:i", $eep)
         RunDude($arg)
