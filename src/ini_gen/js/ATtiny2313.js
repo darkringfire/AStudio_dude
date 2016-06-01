@@ -224,7 +224,12 @@ fuse_defs = {
         }
     },
     "HIGH": {
-        "bits": [{
+        "bits": [
+        {
+            "name": "RSTDISBL",
+            "text": "External reset disable",
+            "default_value": "1"
+        }, {
             "name": "BODLEVEL0",
             "text": "Brown-out Detector trigger level",
             "default_value": "1"
@@ -237,10 +242,6 @@ fuse_defs = {
             "text": "Brown-out Detector trigger level",
             "default_value": "1"
         }, {
-            "name": "EESAVE",
-            "text": "EEPROM memory is preserved through chip erase",
-            "default_value": "1"
-        }, {
             "name": "WDTON",
             "text": "Watchdog Timer Always On",
             "default_value": "1"
@@ -249,12 +250,12 @@ fuse_defs = {
             "text": "Enable Serial programming and Data Downloading",
             "default_value": "0"
         }, {
-            "name": "DWEN",
-            "text": "debugWIRE Enable",
+            "name": "EESAVE",
+            "text": "EEPROM memory is preserved through chip erase",
             "default_value": "1"
         }, {
-            "name": "RSTDISBL",
-            "text": "External reset disable",
+            "name": "DWEN",
+            "text": "debugWIRE Enable",
             "default_value": "1"
         }],
         "options": {
