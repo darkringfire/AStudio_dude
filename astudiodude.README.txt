@@ -15,5 +15,5 @@ Arguments:          -p$(ProjectDir) -t$(TargetDir)$(TargetName)
 
 Title:              AstudioDude : AutoFlash
 Command:            <path>\astudiodude.exe
-Arguments:          -fc -p$(ProjectDir) -t$(TargetDir)$(TargetName)
+Arguments:          -afc -p$(ProjectDir) -t$(TargetDir)$(TargetName)
 
