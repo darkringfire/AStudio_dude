@@ -777,7 +777,7 @@ endfunc
 func BurnFlash()
     $autoFlash = 0
     if FileExists($flash) then
-        $arg = StringFormat(" -U flash:w:%s:i", $flash)
+        $arg = StringFormat(' -U flash:w:"%s":i', $flash)
         RunDude($arg)
     else
         MsgBox($MB_ICONERROR, "File not found", StringFormat('File "%s" not found', $flash))
@@ -787,7 +787,7 @@ endfunc
 func BurnEEPROM()
     $autoEEPROM = 0
     if FileExists($eep) then
-        $arg = StringFormat(" -U eeprom:w:%s:i", $eep)
+        $arg = StringFormat(' -U eeprom:w:"%s":i', $eep)
         RunDude($arg)
     else
         MsgBox($MB_ICONERROR, "File not found", StringFormat('File "%s" not found', $eep))
