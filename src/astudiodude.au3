@@ -1,9 +1,17 @@
 #NoTrayIcon
 #pragma compile(Icon, "fire-multi-size.ico")
 #pragma compile(Out, "..\astudiodude.exe")
+#pragma compile(UPX, True)
+#pragma compile(Compression, 5)
+#pragma compile(Comments, "comment")
+#pragma compile(FileDescription, "description")
+#pragma compile(FileVersion, 2018.03.28)
+#pragma compile(LegalCopyright, "DrFr")
+#pragma compile(ProductName, "AStudioDude")
+#pragma compile(ProductVersion, 1.1)
 
 #include <Array.au3>
-#include <GUIConstantsEx.au3> 
+#include <GUIConstantsEx.au3>
 #include <WindowsConstants.au3>
 #include <ColorConstants.au3>
 #include <StringConstants.au3>
@@ -75,14 +83,31 @@ global $autoFlash = 0
 global $autoEEPROM = 0
 global $autoClose = 0
 
+Global $readFusesButton
+Global $writeFusesButton
+Global $flashButton
+Global $eepButton
+Global $mainWindow
+Global $bitsTab
+Global $optionsTab
+
 $opt = Dict()
 $opt("desc") = "Port"
-$dudeOptions("P") = $opt
+$opt("param") = "P"
+$dudeOptions("port") = $opt
+
+$opt = Dict()
+$opt("desc") = "Baudrate"
+$opt("param") = "b"
+$opt("list") = StringSplit("1200|2400|4800|9600|19200|38400|57600|115200", "|")
+$opt("value") = "5700"
+$dudeOptions("baudrate") = $opt
 
 $opt = Dict()
 $opt("desc") = "Bitclock"
+$opt("param") = "B"
 $opt("list") = StringSplit("4kHz|32kHz|125kHz|250kHz|1MHz", "|")
-$dudeOptions("B") = $opt
+$dudeOptions("bitclock") = $opt
 
 if @Compiled then
     $dudeDir = @ScriptDir
@@ -163,7 +188,7 @@ While (1)
         Exit
     endif
     $lastClick = 0
-WEnd 
+WEnd
 
 ;=======================================================================
 ;=======================================================================
@@ -173,7 +198,7 @@ WEnd
 func ReadDudeConf()
     Local $progArr[0][3]
     Local $devArr[0][3]
-    
+
     $dudeConf = $dudeDir & "\avrdude.conf"
     $dudeConfFile = FileOpen($dudeConf)
     if ($dudeConfFile <> 0) then
@@ -190,7 +215,7 @@ func ReadDudeConf()
             endif
             $matched = @error
             if $matched = 0 or $eof <> 0 then
-                select 
+                select
                     case $eof <> 0 or $match[0] = "programmer" or $match[0] = "part"
                         if $id <> "" then
                             if $type = "programmer" then
@@ -216,13 +241,13 @@ func ReadDudeConf()
             endif
         until $eof <> 0
         FileClose($dudeConfFile)
-        
+
         DescInhetit($progArr, 70)
         DescInhetit($devArr, 30)
-        
+
         _ArraySort($progArr, 0, 0, 0, 1)
         _ArraySort($devArr, 0, 0, 0, 1)
-        
+
         for $i = 0 to UBound($progArr)-1
             $programmers($progArr[$i][0]) = $progArr[$i][1]
         next
@@ -246,10 +271,10 @@ func DescInhetit(ByRef $Arr, $len = 20)
     local $pid
     local $pd
     local $count
-    
+
     for $i = 0 to UBound($Arr)-1
         $arrById($Arr[$i][0]) = $i
-        
+
         $Arr[$i][1] = StringLeft(StringStripWS($Arr[$i][1], $STR_STRIPLEADING + $STR_STRIPTRAILING + $STR_STRIPSPACES) & " ", $len)
         $Arr[$i][1] = StringStripWS(StringRegExpReplace($Arr[$i][1], "\s\S+$", "..."), $STR_STRIPTRAILING)
     next
@@ -277,9 +302,10 @@ endfunc
 func FusesToGUI()
     for $byteName in $fuseBytes
         $byte = $fuseBytes($byteName)
+		$bits = $byte("bits")
         GUICtrlSetData($byte("ctrl"), "0x" & Hex($byte("value"), 2))
-        for $bitN in $byte("bits")
-            $bit = $byte("bits")($bitN)
+        for $bitN in $bits
+            $bit = $bits($bitN)
             if BitAND($byte("value"), BitShift(1, -$bitN)) = 0 then
                 GUICtrlSetState($bit("ctrl"), $GUI_CHECKED)
             else
@@ -299,7 +325,8 @@ func FusesToGUI()
             endif
         else
             if $option("list").Exists($value) then
-                GUICtrlSetData($option("ctrl"), $option("list")($value), $option("list")($value))
+				$list = $option("list")
+                GUICtrlSetData($option("ctrl"), $list($value), $list($value))
             else
                 $optionName = "RESERVED [" & $value & "]"
                 GUICtrlSetData($option("ctrl"), $optionName, $optionName)
@@ -311,9 +338,10 @@ endfunc
 
 func BytesGUIToFuses()
     for $id in $fuseBytes
-        $value = GUICtrlRead($fuseBytes($id)("ctrl"))
+		$fuseByte = $fuseBytes($id)
+        $value = GUICtrlRead($fuseByte("ctrl"))
         if StringIsIntHex($value) then
-            $fuseBytes($id)("value") = Int($value)
+            $fuseByte("value") = Int($value)
         endif
     next
 endfunc
@@ -322,14 +350,16 @@ func BitsGUIToFuses()
     $fuseValues = Dict()
     for $byteName in $fuseBytes
         $fuseVal = 0
-        $bits = $fuseBytes($byteName)("bits")
+		$fuseByte = $fuseBytes($byteName)
+        $bits = $fuseByte("bits")
         for $bitN = 0 to 7
-            if not $bits.Exists($bitN) or GUICtrlRead($bits($bitN)("ctrl")) = $GUI_UNCHECKED then
+			$bit = $bits($bitN)
+            if not $bits.Exists($bitN) or GUICtrlRead($bit("ctrl")) = $GUI_UNCHECKED then
                 $fuseVal = BitOR($fuseVal, BitShift(1, -$bitN))
             endif
         next
 
-        $fuseBytes($byteName)("value") = $fuseVal
+        $fuseByte("value") = $fuseVal
     next
 endfunc
 
@@ -351,45 +381,49 @@ func OptionsGUIToFuses()
     next
 
     for $byteName in $fuseBytes
-        $fuseBytes($byteName)("value") = $fuseValues($byteName)
+		$fuseByte = $fuseBytes($byteName)
+        $fuseByte("value") = $fuseValues($byteName)
     next
 endfunc
 
 ; ========================== FUSEs CONF ============================
 
 func ReadFusesConf()
-    
+
     $ini = StringFormat("%s\fuses\%s.ini", $dudeDir, $device)
     $arg = ""
-    
-    
+
+
     for $byteName in $fuseBytes
-        GUICtrlDelete($fuseBytes($byteName)("ctrl"))
-        GUICtrlDelete($fuseBytes($byteName)("label"))
-        $bits = $fuseBytes($byteName)("bits")
+		$fuseByte = $fuseBytes($byteName)
+        GUICtrlDelete($fuseByte("ctrl"))
+        GUICtrlDelete($fuseByte("label"))
+        $bits = $fuseByte("bits")
         for $bitN in $bits
-            GUICtrlDelete($bits($bitN)("ctrl"))
+			$bit = $bits($bitN)
+            GUICtrlDelete($bit("ctrl"))
         next
     next
     for $i in $fuseOptions
-        GUICtrlDelete($fuseOptions($i)("ctrl"))
+		$fuseOption = $fuseOptions($i)
+        GUICtrlDelete($fuseOption("ctrl"))
     next
     for $i in $fuseInfoCtrls
         GUICtrlDelete($fuseInfoCtrls($i))
     next
-    
+
     $fuseBytes = Dict()
     $fuseOptions = Dict()
     $fuseOptionsValues = Dict()
     $fuseInfoCtrls = Dict()
     if (FileExists($ini)) then
         $fuseBytesList = StringSplit(IniRead($ini, "main", "fuses", ""), ":", $STR_NOCOUNT)
-        
+
         for $i = 0 to UBound($fuseBytesList)-1
             $fuseByteName = $fuseBytesList[$i]
             $fuseByte = Dict()
             $fuseByte("value") = Int(IniRead($ini, "default", $fuseByteName, 255))
-            
+
             $bits = Dict()
             $fuseBitsList = IniRead($ini, "main", $fuseByteName, "")
             if ($fuseBitsList <> "") then
@@ -405,9 +439,9 @@ func ReadFusesConf()
                     endif
                 next
             endif
-            
+
             $fuseByte("bits") = $bits
-            
+
             $fuseBytes($fuseByteName) = $fuseByte
         next
 
@@ -416,13 +450,15 @@ func ReadFusesConf()
             $fuseOptionsList = StringSplit($fuseOptionsList, ":", $STR_NOCOUNT)
             for $i = 0 to UBound($fuseOptionsList)-1
                 $fuseOptionName = $fuseOptionsList[$i]
-                
+
                 $fuseOption = Dict()
                 $fuseOption("fuse") = IniRead($ini, $fuseOptionName, "fuse", "")
                 $fuseOption("mask") = Int(IniRead($ini, $fuseOptionName, "mask", 0))
-                for $j in $fuseBytes($fuseOption("fuse"))("bits")
+				$fuseByte = $fuseBytes($fuseOption("fuse"))
+                for $j in $fuseByte("bits")
                     if BitAND(BitShift(1, -$j), $fuseOption("mask")) then
-                        $bit = $fuseBytes($fuseOption("fuse"))("bits")($j)
+						$bits = $fuseByte("bits")
+                        $bit = $bits($j)
                         if $bit.Exists("danger") then
                             $fuseOption("danger") = 1
                         endif
@@ -456,7 +492,7 @@ endfunc
 
 func FuseGUI()
     GUICtrlSetState($writeFusesButton, $GUI_DISABLE)
-    
+
     GUISwitch($mainWindow, $bitsTab)
     $fuseInfoCtrls("g1") = GUICtrlCreateLabel("WARNING!", $posBitsLeft, $posFuseTop + $posStepY * 3 + 3, 60, $posY)
     GUICtrlSetColor(-1, 0x880000)
@@ -469,16 +505,18 @@ func FuseGUI()
 
     $byteN = 0
     for $fuseByteName in $fuseBytes
-        $bits = $fuseBytes($fuseByteName)("bits")
-        $fuseBytes($fuseByteName)("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $byteN, $posFuseTop + $posStepY + 3, 40, $posY)
-        $fuseBytes($fuseByteName)("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $byteN + 30, $posFuseTop + $posStepY, 40, $posY)
+		$fuseByte = $fuseBytes($fuseByteName)
+        $bits = $fuseByte("bits")
+        $fuseByte("label") = GUICtrlCreateLabel($fuseByteName, $posLeft + $posFuseStepX * $byteN, $posFuseTop + $posStepY + 3, 40, $posY)
+        $fuseByte("ctrl") = GUICtrlCreateInput("", $posLeft + $posFuseStepX * $byteN + 30, $posFuseTop + $posStepY, 40, $posY)
         GUICtrlSetOnEvent(-1, "FuseByteMod")
-        
+
         GUISwitch($mainWindow, $bitsTab)
         for $bitN in $bits
-            $bitName = $bits($bitN)("name")
-            $bits($bitN)("ctrl") = GUICtrlCreateCheckbox($bitName, $posBitsLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (7-$bitN), $posFuseStepX - 10, $posY)
-            if $bits($bitN)("danger") then
+			$bit = $bits($bitN)
+            $bitName = $bit("name")
+            $bit("ctrl") = GUICtrlCreateCheckbox($bitName, $posBitsLeft + $posFuseStepX * $byteN, $posBitsTop + $posBitsStepY * (7-$bitN), $posFuseStepX - 10, $posY)
+            if $bit("danger") then
                 GUICtrlSetColor(-1, 0x880000)
                 ; GUICtrlSetFont(-1, 9, $FW_BOLD)
             endif
@@ -489,11 +527,11 @@ func FuseGUI()
 
         $byteN += 1
     next
-    
+
     $optN = 0
     for $optionName in $fuseOptions
         $fuseOption = $fuseOptions($optionName)
-        
+
         GUISwitch($mainWindow, $optionsTab)
         if $fuseOption("select") = 0 then
             $fuseOption("ctrl") = GUICtrlCreateCheckbox($fuseOption("desc"), $posOptLeft, $posOptTop + 1 + $posOptStepY * $optN, $posOptX, $posY)
@@ -501,8 +539,9 @@ func FuseGUI()
         else
             $fuseOption("ctrl") = GUICtrlCreateCombo("", $posOptLeft, $posOptTop + $posOptStepY * $optN, $posOptX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
             GUICtrlSetOnEvent(-1, "FuseOptionMod")
-            for $val in $fuseOption("list")
-                GUICtrlSetData(-1, $fuseOption("list")($val))
+			$list = $fuseOption("list")
+            for $val in $list
+                GUICtrlSetData(-1, $list($val))
             next
         endif
         if $fuseOption("danger") then
@@ -510,7 +549,7 @@ func FuseGUI()
             ; GUICtrlSetFont(-1, 9, $FW_BOLD)
         endif
         GUICtrlCreateTabItem("")
-        
+
         ;$fuseOptions($optionName) = $fuseOption
         $optN +=1
     next
@@ -521,10 +560,10 @@ endfunc
 func InitGUI()
     Opt("GUIOnEventMode", 1)
     DllCall("uxtheme.dll", "none", "SetThemeAppProperties", "int", 0)
-    
-    Global $mainWindow = GUICreate("AStudioDude", $posMainX, $posMainY) 
-    GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked") 
-    
+
+    Global $mainWindow = GUICreate("AStudioDude", $posMainX, $posMainY)
+    GUISetOnEvent($GUI_EVENT_CLOSE, "CLOSEClicked")
+
     Global $progCtrl = GUICtrlCreateCombo("", $posLeft, $posTop, $posProgX, $posY, $CBS_DROPDOWNLIST+$WS_VSCROLL)
     for $id in $programmers
         $item = StringFormat("%s [%s]", $programmers($id), $id)
@@ -538,15 +577,15 @@ func InitGUI()
         GUICtrlSetData(-1, $item, $id = $device ? $item : 0)
     next
     GUICtrlSetOnEvent(-1, "DeviceApply")
-    
+
     $optN = 0
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
         $value = $opt("value")
         select
             case $opt.Exists("list")
-                GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 37, $posY, $SS_RIGHT)
-                $opt("ctrl") = GUICtrlCreateCombo(" ", $posLeft + 110 * $optN + 40, 35, 60, $posY)
+                GUICtrlCreateLabel($opt("desc"), $posLeft + 110 * $optN, 38, 45, $posY, $SS_RIGHT)
+                $opt("ctrl") = GUICtrlCreateCombo(" ", $posLeft + 110 * $optN + 50, 35, 60, $posY)
                 for $i = 1 to $opt("list")[0]
                     GUICtrlSetData(-1, $opt("list")[$i])
                 next
@@ -560,12 +599,12 @@ func InitGUI()
         endselect
         $optN += 1
     next
-    
+
     ; Global $hardwareApplyButton = GUICtrlCreateButton("Apply", $posLeft + $posProgX + $posDevX + $posSpaceX * 2, $posTop, $posButtonX, $posY)
     ; GUICtrlSetOnEvent(-1, "HardwareApply")
-    
-    
-    
+
+
+
     GUICtrlCreateLabel("Flash:", $posLeft, $posTop + $posStepY * 2 + 3, $posButtonX, $posY)
     Global $flashCtrl = GUICtrlCreateInput($flash, $posLeft + $posButtonX, $posTop + $posStepY * 2, $posPathX, $posY)
     global $flashButton = GUICtrlCreateButton("Flash!", $posMainX - $posLeft - $posButtonX, $posTop + $posStepY * 2, $posButtonX, $posY)
@@ -576,35 +615,35 @@ func InitGUI()
     GUICtrlSetOnEvent(-1, "BurnClick")
 
     GUICtrlCreateLabel("Fuses:", $posLeft, $posFuseTop + 3, $posButtonX, $posY)
-    
+
     Global $readFusesButton = GUICtrlCreateButton("Read", $posLeft + $posButtonX, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetOnEvent(-1, "BurnClick")
 
     Global $writeFusesButton = GUICtrlCreateButton("Write", $posLeft + $posSpaceX + $posButtonX * 2, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
     GUICtrlSetOnEvent(-1, "BurnClick")
-    
+
     Global $abortDudeButton = GUICtrlCreateButton("Abort", $posLeft + $posSpaceX * 2 + $posButtonX * 3, $posFuseTop, $posButtonX, $posY)
     GUICtrlSetState(-1, $GUI_DISABLE)
     GUICtrlSetOnEvent(-1, "AbortProcess")
-    
+
     GUICtrlCreateTab($posLeft, $posTabTop, $posOptX + $posLeft * 2, $posTabY)
     global $optionsTab = GUICtrlCreateTabItem("Options")
     GUICtrlSetState(-1, $GUI_SHOW)
     global $bitsTab = GUICtrlCreateTabItem("Bits")
     GUICtrlCreateTabItem("")
-    
+
     Global $logCtrl = GUICtrlCreateEdit("", $posLeft, $posLogTop, $posLogX, $posLogY);
     GUICtrlSetFont(-1, 8, 0, 0, "Consolas")
     GUICtrlSetBkColor(-1, 0x202020)
     GUICtrlSetColor(-1, 0xAAFF99)
-    
+
     ; Global $infoCtrl = GUICtrlCreateEdit("", $posLeft, 835, 660, 50);
     ; GUICtrlSetFont(-1, 8, 0, 0, "Consolas")
     ; GUICtrlSetBkColor(-1, 0x202020)
     ; GUICtrlSetColor(-1, 0x88FF88)
 
-    GUISetState(@SW_SHOW, $mainWindow) 
+    GUISetState(@SW_SHOW, $mainWindow)
 endfunc
 
 ; ========== WORK WITH AVRDUDE =================================================
@@ -623,8 +662,9 @@ func DisableControls()
     for $byteName in $fuseBytes
         $byte = $fuseBytes($byteName)
         $storeControls($byte("ctrl")) = GUICtrlGetState($byte("ctrl"))
-        for $bitN in $byte("bits")
-            $bit = $byte("bits")($bitN)
+		$bits = $byte("bits")
+        for $bitN in $bits
+            $bit = $bits($bitN)
             $storeControls($bit("ctrl")) = GUICtrlGetState($bit("ctrl"))
         next
     next
@@ -632,13 +672,13 @@ func DisableControls()
         $option = $fuseOptions($optionName)
         $storeControls($option("ctrl")) = GUICtrlGetState($option("ctrl"))
     next
-    
+
     for $ctrl in $storeControls
         GUICtrlSetState($ctrl, $GUI_DISABLE)
     next
-    
+
     GUICtrlSetState($abortDudeButton, $GUI_ENABLE)
-    
+
 endfunc
 
 func RestoreControls()
@@ -646,7 +686,7 @@ func RestoreControls()
         GUICtrlSetState($ctrl, $storeControls($ctrl))
     next
     $storeControls = Dict()
-    
+
     GUICtrlSetState($abortDudeButton, $GUI_DISABLE)
 endfunc
 
@@ -664,7 +704,7 @@ func DudeCmd()
         $opt = $dudeOptions($optName)
         $value = $opt("value")
         if $value <> "" then
-            $cmd &= StringFormat(" -%s %s", $optName, $value)
+            $cmd &= StringFormat(" -%s %s", $opt("param"), $value)
         endif
     next
     return $cmd
@@ -672,11 +712,12 @@ endfunc
 
 func RunDude($arg)
     GUICtrlSetData($logCtrl, "")
-    
+
     $cmd = DudeCmd() & $arg
     DisableControls()
+	GUICtrlSetData($logCtrl, $cmd, 1)
     $avrdudePID = Run($cmd, "", @SW_HIDE, $STDOUT_CHILD + $STDERR_CHILD + $STDIN_CHILD)
-    
+
     $log = ""
     $data = ""
     $stop = 0
@@ -714,7 +755,7 @@ func RunDude($arg)
                     else
                         MsgBox($MB_ICONERROR, "Error", "Can't open port")
                     endif
-                    
+
                 endif
                 ;could not find USB device
                 if StringInStr($log, "could not find USB device") > 0 then
@@ -730,10 +771,10 @@ func RunDude($arg)
         $autoEEPROM = 0
         $autoClose = 0
     endif
-    
+
     RestoreControls()
-    
-    
+
+
     return $data
 endfunc
 
@@ -746,18 +787,19 @@ func ReadFuses()
         $n += 1
         $arg &= StringFormat(" -U %s:r:-:h", $fuseByteName)
     next
-    
+
     $outArr = RunDude($arg)
     $outArr = StringSplit($outArr, @CRLF, $STR_ENTIRESPLIT)
     if $outArr[0] - 1 = $n then
         $n = 0
         for $fuseByteName in $fuseBytes
             $n += 1
-            $fuseBytes($fuseByteName)("value") = Int($outArr[$n])
+			$fuseByte = $fuseBytes($fuseByteName)
+            $fuseByte("value") = Int($outArr[$n])
         next
         GUICtrlSetState($writeFusesButton, $GUI_ENABLE)
     endif
-    
+
     FusesToGUI()
 endfunc
 
@@ -767,11 +809,12 @@ func WriteFuses()
     $arg = ""
 
     for $fuseByteName in $fuseBytes
-        $arg &= StringFormat(" -U %s:w:%s:m", $fuseByteName, "0x" & Hex($fuseBytes($fuseByteName)("value"), 2))
+		$fuseByte = $fuseBytes($fuseByteName)
+        $arg &= StringFormat(" -U %s:w:%s:m", $fuseByteName, "0x" & Hex($fuseByte("value"), 2))
     next
-    
+
     RunDude($arg)
-    
+
 endfunc
 
 func BurnFlash()
@@ -804,7 +847,13 @@ func LoadProjectConf()
     $eep = IniRead($conf, "conf", "eep", "")
     for $optName in $dudeOptions
         $opt = $dudeOptions($optName)
-        $opt("value") = StringStripWS(IniRead($conf, "conf", $optName, ""), $STR_STRIPALL)
+		$value = StringStripWS(IniRead($conf, "conf", $optName, ""), $STR_STRIPALL)
+		If $value <> "" Then
+			$opt("value") = $value
+		ElseIf Not $opt.Exists("value") Then
+			$opt("value") = ""
+		EndIf
+
     next
 endfunc
 
@@ -849,12 +898,12 @@ endfunc
 
 ; ==================== Events Handlers ======================
 
-Func CLOSEClicked() 
-    If @GUI_WinHandle = $mainwindow Then 
+Func CLOSEClicked()
+    If @GUI_WinHandle = $mainwindow Then
         ProgrammerApply()
         SaveProjectConf()
-        Exit 
-    EndIf 
+        Exit
+    EndIf
 EndFunc
 
 func FuseByteMod()
